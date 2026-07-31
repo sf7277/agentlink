@@ -6,7 +6,7 @@ import { DomainError } from "../../core/domain/errors.js";
  * Write boundary for the shared user-owned ~/.claude directory.
  *
  * AgentLink deliberately shares the interactive TUI's Claude home (owner
- * decision, task18). The only writes allowed through this module are:
+ * decision). The only writes allowed through this module are:
  *   1. nothing — session files are written by the claude subprocess itself;
  *   2. deleting an AGENTLINK-owned session JSONL whose id matches exactly.
  * Credentials, settings, CLAUDE.md, other session files and the Keychain are
@@ -22,8 +22,8 @@ export function isSafeClaudeNativeSessionId(value: string): boolean {
 /**
  * Claude Code stores sessions under projects/<encoded-cwd>/ where every
  * non-alphanumeric byte of the canonical cwd is replaced by "-". This must
- * stay byte-identical with the CLI's own encoding; the Phase B probe asserts
- * it against a real session before any release.
+ * stay byte-identical with the CLI's own encoding; integration tests assert
+ * it against a native-session-compatible fixture.
  */
 export function encodedClaudeProjectDirectory(projectRoot: string): string {
   return projectRoot.replace(/[^A-Za-z0-9]/gu, "-");

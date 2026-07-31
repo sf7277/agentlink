@@ -131,7 +131,7 @@ export function agentCapabilities(agent: ConfigurableAgentKind) {
     };
   }
   if (agent === "claude") {
-    // Claude adopts existing TUI sessions (task18 Phase D) but has no native
+    // Claude adopts existing TUI sessions but has no native
     // close/archive concept and no steering.
     return {
       new: true,

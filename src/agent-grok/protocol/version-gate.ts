@@ -10,7 +10,7 @@ export interface GrokVersion {
   readonly raw: string;
 }
 
-/** Probe baseline from task 15 / ADR 0005. */
+/** Minimum version established by the maintained compatibility probes. */
 export const GROK_MINIMUM_VERSION = "0.2.106";
 
 export function parseGrokVersion(output: string): GrokVersion {

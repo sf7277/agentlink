@@ -100,7 +100,7 @@ export class FakeClaudeSdkClient implements ClaudeSdkClient {
   permissionToolName = "Bash";
   permissionToolInput: unknown = { command: "echo hi" };
   nextToolUse = 1;
-  /** Native sessions reported by listSessions (Phase D discovery). */
+  /** Native sessions reported by listSessions discovery. */
   discoverable: ClaudeSdkSessionSummary[] = [];
   readonly listedDirectories: { cwd: string; limit: number }[] = [];
   #nextSession = 1;

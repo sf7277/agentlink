@@ -153,7 +153,7 @@ test("Claude configure verifies the user's CLI, persists it and exposes its capa
       close: false,
       archive: false,
       unarchive: false,
-      // Claude adopts existing TUI sessions (task18 Phase D).
+      // Claude adopts existing TUI sessions.
       import: true,
       steer: false
     }

@@ -1,8 +1,8 @@
 /**
  * Thin contract between the Claude adapter and the Claude Agent SDK.
  *
- * Phase A ships this interface plus a fake for contract tests; Phase B adds
- * the real binding backed by @anthropic-ai/claude-agent-sdk. The adapter only
+ * The adapter uses this interface plus a fake for contract tests; the real
+ * binding is backed by @anthropic-ai/claude-agent-sdk. The adapter only
  * depends on this module so the SDK can be replaced or upgraded in one place.
  */
 

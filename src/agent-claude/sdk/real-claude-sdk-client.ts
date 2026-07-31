@@ -23,7 +23,7 @@ import {
  * Real binding to @anthropic-ai/claude-agent-sdk (exact version pinned in
  * package.json; the SDK ships its own claude CLI binary).
  *
- * Configuration posture (ADR 0007 / 0008):
+ * Configuration posture:
  * - Omit settingSources and permissionMode so the user's Claude CLI applies
  *   its normal user/project configuration, hooks and effective policy.
  * - canUseTool is only called for requests which remain pending after that
@@ -54,7 +54,7 @@ export interface RealClaudeSdkClientOptions {
 /**
  * Deliberately small subprocess environment. USER is required: without it
  * the CLI cannot locate the login keychain and reports "Not logged in" even
- * though the credentials exist (verified by probe, task18 Phase B).
+ * though the credentials exist (verified against the native CLI).
  *
  * Authentication/environment selection is intentionally not copied from an
  * interactive shell. The CLI's persistent user/project settings are inherited
@@ -182,7 +182,7 @@ class RealClaudeSdkSession implements ClaudeSdkSessionHandle {
     // The CLI only emits system/init once the input stream yields its first
     // message. Prime with an empty non-querying message so the session id
     // exists before the first real turn, without an assistant turn and
-    // without polluting the model's context (verified, task18 Phase B).
+    // without polluting the model's context.
     this.#input.push({
       type: "user",
       message: { role: "user", content: "" },

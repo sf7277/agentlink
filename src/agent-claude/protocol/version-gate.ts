@@ -5,8 +5,8 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Minimum Claude Code CLI verified against the pinned Agent SDK.
- * Bump together with the SDK version after re-running the task18 Phase B
- * probes (task14 long-term maintenance check).
+ * Bump together with the SDK version after re-running the native compatibility
+ * probes and release checks.
  */
 export const CLAUDE_MINIMUM_VERSION = "2.1.220";
 
