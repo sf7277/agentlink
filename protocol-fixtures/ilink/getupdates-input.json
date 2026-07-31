@@ -1,0 +1,26 @@
+{
+  "ret": 0,
+  "msgs": [
+    {
+      "seq": 8,
+      "message_id": 1002,
+      "from_user_id": "fixture-owner",
+      "to_user_id": "fixture-bot",
+      "create_time_ms": 1784304001000,
+      "session_id": "fixture-conversation",
+      "message_type": 1,
+      "message_state": 2,
+      "item_list": [
+        {
+          "type": 1,
+          "text_item": {
+            "text": "请返回 fixture result"
+          }
+        }
+      ],
+      "context_token": "fixture-context-placeholder"
+    }
+  ],
+  "get_updates_buf": "fixture-cursor-input",
+  "longpolling_timeout_ms": 35000
+}

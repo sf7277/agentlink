@@ -1,0 +1,24 @@
+{
+  "ret": 0,
+  "msgs": [
+    {
+      "message_id": 1002,
+      "from_user_id": "fixture-owner",
+      "to_user_id": "fixture-bot",
+      "create_time_ms": 1784304001000,
+      "session_id": "fixture-conversation",
+      "message_type": 1,
+      "message_state": 2,
+      "item_list": [
+        {
+          "type": 4,
+          "file_item": {
+            "file_name": "untrusted.bin"
+          }
+        }
+      ],
+      "context_token": "fixture-context-placeholder"
+    }
+  ],
+  "get_updates_buf": "fixture-cursor-attachment"
+}

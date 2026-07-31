@@ -1,0 +1,37 @@
+{
+  "msgs": [
+    {
+      "seq": 9,
+      "message_id": 9223372036854775807,
+      "from_user_id": "fixture-owner",
+      "to_user_id": "fixture-bot",
+      "client_id": "",
+      "create_time_ms": 1784304002000,
+      "update_time_ms": 1784304002000,
+      "delete_time_ms": 0,
+      "session_id": "",
+      "group_id": "",
+      "message_type": 1,
+      "message_state": 2,
+      "item_list": [
+        {
+          "type": 1,
+          "create_time_ms": 1784304002000,
+          "update_time_ms": 1784304002000,
+          "is_completed": true,
+          "msg_id": "",
+          "button_item_list": [],
+          "at_bot_username_list": [],
+          "text_item": {
+            "text": "real shape"
+          }
+        }
+      ],
+      "context_token": "fixture-context-placeholder",
+      "root_id": 0,
+      "parent_id": 0
+    }
+  ],
+  "sync_buf": "",
+  "get_updates_buf": "fixture-cursor-real-shape"
+}

@@ -1,0 +1,24 @@
+{
+  "codexVersion": "0.144.4",
+  "generatedAt": "2026-07-18",
+  "experimentalIncluded": false,
+  "requiredMethods": [
+    "initialize",
+    "thread/start",
+    "thread/resume",
+    "thread/archive",
+    "thread/unarchive",
+    "thread/list",
+    "thread/read",
+    "thread/inject_items",
+    "turn/start",
+    "turn/steer",
+    "turn/interrupt"
+  ],
+  "requiredServerRequests": [
+    "item/commandExecution/requestApproval",
+    "item/fileChange/requestApproval",
+    "item/permissions/requestApproval"
+  ],
+  "source": "codex app-server generate-ts/generate-json-schema from local codex-cli 0.144.4"
+}

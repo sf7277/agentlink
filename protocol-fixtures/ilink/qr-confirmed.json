@@ -1,0 +1,7 @@
+{
+  "status": "confirmed",
+  "bot_token": "fixture-token-placeholder",
+  "ilink_bot_id": "fixture-bot",
+  "ilink_user_id": "fixture-owner",
+  "baseurl": "https://fixture.invalid"
+}

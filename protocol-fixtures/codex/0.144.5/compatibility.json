@@ -1,0 +1,12 @@
+{
+  "codexVersion": "0.144.5",
+  "baselineFixture": "../0.144.4",
+  "generatedAt": "2026-07-18",
+  "experimentalIncluded": false,
+  "verification": "Official npm darwin-arm64 binary generated stable TypeScript and JSON Schema",
+  "selectedTypeScriptFilesDiffer": false,
+  "sha256": {
+    "ClientRequest.ts": "b91a43a7f5006cdd0fec35a482f585affc2e1055ffd854936f7b32bd986f6bf2",
+    "ServerRequest.ts": "30880f1a8da876eec30600ba27560d05ad0db5c645e14564c9c79a2429274f06"
+  }
+}

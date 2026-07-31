@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.artifacts/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sock
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# 真实渠道联调脚本只保留在私有工作区，不能进入公开仓库。
+scripts/configure-real-gateway.mjs
+scripts/real-*.mjs

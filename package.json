@@ -1,0 +1,64 @@
+{
+  "name": "@sf7277/agentlink",
+  "version": "0.1.31",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Local control plane for connecting trusted coding agents to messaging channels.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "bin": {
+    "agentlink-gateway": "dist/src/main.js",
+    "agentlink": "dist/src/ctl.js",
+    "agentlinkctl": "dist/src/ctl.js"
+  },
+  "scripts": {
+    "build": "\"$npm_node_execpath\" node_modules/typescript/bin/tsc -p tsconfig.json && \"$npm_node_execpath\" scripts/copy-assets.mjs",
+    "typecheck": "\"$npm_node_execpath\" node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "\"$npm_node_execpath\" scripts/run-tests.mjs unit contract",
+    "test:integration": "\"$npm_node_execpath\" scripts/run-tests.mjs integration fault",
+    "test:acceptance": "\"$npm_node_execpath\" scripts/run-tests.mjs acceptance",
+    "test:all": "\"$npm_node_execpath\" scripts/run-tests.mjs",
+    "postinstall": "\"$npm_node_execpath\" scripts/npm-postinstall.mjs",
+    "prepack": "\"$npm_node_execpath\" node_modules/typescript/bin/tsc -p tsconfig.json && \"$npm_node_execpath\" scripts/copy-assets.mjs",
+    "release:macos": "\"$npm_node_execpath\" scripts/build-release.mjs",
+    "release:sign-dmg": "\"$npm_node_execpath\" scripts/sign-notarize-release.mjs",
+    "check:boundaries": "\"$npm_node_execpath\" scripts/check-boundaries.mjs",
+    "check:secrets": "\"$npm_node_execpath\" scripts/check-secrets.mjs",
+    "check": "\"$npm_node_execpath\" node_modules/typescript/bin/tsc -p tsconfig.json --noEmit && \"$npm_node_execpath\" node_modules/typescript/bin/tsc -p tsconfig.json && \"$npm_node_execpath\" scripts/copy-assets.mjs && \"$npm_node_execpath\" scripts/check-boundaries.mjs && \"$npm_node_execpath\" scripts/check-secrets.mjs && \"$npm_node_execpath\" scripts/run-tests.mjs"
+  },
+  "files": [
+    "dist/src/",
+    "dist/migrations/",
+    "dist/protocol-fixtures/",
+    "scripts/npm-postinstall.mjs",
+    "src/platform-macos/keychain-helper.m",
+    "src/platform-macos/qr-code-renderer.m",
+    "LICENSE",
+    "OPERATIONS.md",
+    "CONTRIBUTING.md",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "better-sqlite3": "12.11.1",
+    "lossless-json": "^4.3.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "22.20.1",
+    "typescript": "7.0.2"
+  }
+}

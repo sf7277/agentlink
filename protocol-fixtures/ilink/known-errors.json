@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "name": "http-authentication",
+      "http_status": 401,
+      "expected_kind": "authentication"
+    },
+    {
+      "name": "http-rate-limit",
+      "http_status": 429,
+      "expected_kind": "rate_limit"
+    },
+    {
+      "name": "missing-endpoint",
+      "http_status": 404,
+      "expected_kind": "compatibility_signal"
+    },
+    {
+      "name": "expired-token",
+      "http_status": 200,
+      "body": {
+        "ret": -1,
+        "errcode": -14,
+        "errmsg": "fixture session timeout"
+      },
+      "expected_kind": "authentication"
+    },
+    {
+      "name": "unknown-api-code",
+      "http_status": 200,
+      "body": {
+        "ret": -1,
+        "errcode": 900001,
+        "errmsg": "fixture unknown code"
+      },
+      "expected_kind": "compatibility_signal"
+    }
+  ]
+}
