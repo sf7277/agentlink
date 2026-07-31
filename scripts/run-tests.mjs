@@ -26,20 +26,11 @@ if (files.length === 0) {
   console.error(`No compiled tests found for: ${groups.join(", ")}`);
   process.exitCode = 1;
 } else {
-  // A test can leave an event-loop handle open after all assertions have completed.
-  // Keep CI bounded without changing production-process lifecycle behavior.
-  const child = spawn(process.execPath, ["--test", "--test-force-exit", ...files.sort()], {
+  const child = spawn(process.execPath, ["--test", ...files.sort()], {
     stdio: "inherit",
     shell: false
   });
-  child.once("error", (error) => {
-    console.error(error);
-    process.exit(1);
-  });
-  child.once("exit", (code, signal) => {
-    // Test workers can retain inherited stdio handles after their parent exits.
-    // This wrapper is a disposable CLI process, so terminate it once the test
-    // runner has reported its final status instead of waiting on those handles.
-    process.exit(signal === null ? (code ?? 1) : 1);
+  child.on("exit", (code, signal) => {
+    process.exitCode = signal === null ? (code ?? 1) : 1;
   });
 }
