@@ -54,3 +54,8 @@ test("safe diagnostics redact authorization variants, cookies and custom token h
   assert.match(output, /X-Service-Token: \[REDACTED\]/u);
   assert.match(output, /X-Api-Key=\[REDACTED\]/u);
 });
+
+test("safe diagnostics bounds work for a long non-secret token", () => {
+  const output = sanitizeDiagnostic("x".repeat(400 * 1024), 256);
+  assert.equal(Buffer.byteLength(output), 256);
+});

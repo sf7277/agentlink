@@ -30,7 +30,7 @@ export function sanitizeDiagnostic(value: string | Buffer, maxBytes = 512): stri
     .replace(/\b(Authorization\s*[:=]\s*)(?:(?:Bearer|Basic)\s+\S+|[^\s,;]+)/giu, "$1[REDACTED]")
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]{8,}/giu, "$1[REDACTED]")
     .replace(/\b(Set-Cookie|Cookie)\s*[:=]\s*[^\r\n]+/giu, "$1: [REDACTED]")
-    .replace(/(["']?(?:(?:x[-_])?[a-z0-9_-]*(?:token|secret|api[_-]?key)|cookie|authorization|password)["']?\s*[:=]\s*)["']?[^"',\s}]+["']?/giu, "$1[REDACTED]")
+    .replace(/(["']?(?:(?:x[-_])?[a-z0-9_-]{0,64}(?:token|secret|api[_-]?key)|cookie|authorization|password)["']?\s*[:=]\s*)["']?[^"',\s}]+["']?/giu, "$1[REDACTED]")
     .replace(home === undefined || home === "" ? /$^/u : new RegExp(escapeRegExp(home), "gu"), "~")
     .replace(/\/Users\/[^/\s]+/gu, "/Users/<user>")
     .replace(/\/home\/[^/\s]+/gu, "/home/<user>")
