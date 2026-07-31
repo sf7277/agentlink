@@ -32,7 +32,14 @@ if (files.length === 0) {
     stdio: "inherit",
     shell: false
   });
-  child.on("exit", (code, signal) => {
-    process.exitCode = signal === null ? (code ?? 1) : 1;
+  child.once("error", (error) => {
+    console.error(error);
+    process.exit(1);
+  });
+  child.once("exit", (code, signal) => {
+    // Test workers can retain inherited stdio handles after their parent exits.
+    // This wrapper is a disposable CLI process, so terminate it once the test
+    // runner has reported its final status instead of waiting on those handles.
+    process.exit(signal === null ? (code ?? 1) : 1);
   });
 }
