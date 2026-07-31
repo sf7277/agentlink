@@ -26,7 +26,9 @@ if (files.length === 0) {
   console.error(`No compiled tests found for: ${groups.join(", ")}`);
   process.exitCode = 1;
 } else {
-  const child = spawn(process.execPath, ["--test", ...files.sort()], {
+  // A test can leave an event-loop handle open after all assertions have completed.
+  // Keep CI bounded without changing production-process lifecycle behavior.
+  const child = spawn(process.execPath, ["--test", "--test-force-exit", ...files.sort()], {
     stdio: "inherit",
     shell: false
   });
