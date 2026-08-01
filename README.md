@@ -29,7 +29,7 @@ npm install -g @sf7277/agentlink
 agentlink doctor
 ```
 
-当前 npm 最新版本为 [0.1.23](https://www.npmjs.com/package/@sf7277/agentlink)。
+当前 npm 版本为 [0.1.32](https://www.npmjs.com/package/@sf7277/agentlink)。
 
 安装时，`better-sqlite3` 会匹配当前 Node ABI；若没有可用预编译模块，npm 会在本机编译。因此可能需要 Xcode Command Line Tools、Python 和可用编译环境。安装过程还会为当前 macOS 架构编译 Keychain 与二维码辅助程序。
 
