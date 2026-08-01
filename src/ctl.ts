@@ -30,6 +30,7 @@ import {
 import { WechatPairingService } from "./platform-macos/wechat-pairing-service.js";
 import { WechatDisconnectService } from "./platform-macos/wechat-disconnect-service.js";
 import { SqliteBackupManager } from "./storage-sqlite/backup-manager.js";
+import { AGENTLINK_VERSION } from "./version.js";
 
 const BOOLEAN_OPTIONS = new Set([
   "confirm-local",
@@ -43,6 +44,14 @@ const BOOLEAN_OPTIONS = new Set([
 export async function runCtl(argv: string[]): Promise<number> {
   const args = [...argv];
   const command = args.shift();
+  if (command === "--version" || command === "-v") {
+    if (args.length !== 0) {
+      usage(process.stderr);
+      return 2;
+    }
+    process.stdout.write(`${AGENTLINK_VERSION}\n`);
+    return 0;
+  }
   if (command === "--help" || command === "-h" || command === "help") {
     if (args.length !== 0) {
       usage(process.stderr);
@@ -888,6 +897,7 @@ function usage(output: Pick<NodeJS.WriteStream, "write">): void {
   output.write(
     "AgentLink 本机控制命令\n\n" +
     "常用\n" +
+    "  agentlink --version | -v\n" +
     "  agentlink doctor\n" +
     "  agentlink status | start | stop | restart | logs [--lines <n>]\n" +
     "  agentlink pair wechat\n" +

@@ -526,7 +526,7 @@ export class SharedClaudeAdapter implements AgentPort {
       turnId: active.gatewayTurnId,
       actionKind: action.kind,
       actionDigest,
-      summary: permissionSummary(sdkRequest.toolName, action.displayInput),
+      summary: permissionSummary(sdkRequest.toolName, sdkRequest.toolInput, action.displayInput),
       risk: riskForToolName(sdkRequest.toolName),
       observedAt: this.#clock()
     };
@@ -651,8 +651,16 @@ function claudeActionKind(toolName: string): string {
   return "tool";
 }
 
-function permissionSummary(toolName: string, displayInput: string): string {
-  return `Claude ${toolName} | ${displayInput}`.slice(0, 400);
+function permissionSummary(toolName: string, toolInput: unknown, displayInput: string): string {
+  const command = commandFromToolInput(toolInput);
+  const summary = `Claude ${toolName} | ${command ?? displayInput}`;
+  return command === undefined ? summary.slice(0, 400) : summary;
+}
+
+function commandFromToolInput(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const command = (value as Record<string, unknown>)["command"];
+  return typeof command === "string" ? command : undefined;
 }
 
 function canonicalClaudeAction(

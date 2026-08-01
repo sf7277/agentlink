@@ -275,8 +275,9 @@ test("Grok approval summary includes real input, redacts display secrets, and un
   transport.permissionMode = "request";
   transport.permissionTitle = "Harmless title";
   transport.permissionKind = "mystery";
+  const completeCommand = `/bin/zsh -lc '${"echo safe-step ".repeat(24)}--final-marker'`;
   transport.permissionRawInput = {
-    command: "rm -rf /tmp/example",
+    command: completeCommand,
     authorization: "Bearer secret-value"
   };
   const client = new AcpRpcClient(transport, { requestTimeoutMs: 5_000 });
@@ -300,7 +301,8 @@ test("Grok approval summary includes real input, redacts display secrets, and un
   await adapter.create({ ...openSession("approval"), agentKind: "grok", state: "CREATING" });
   await adapter.sendTurn({ sessionId: "approval", turnId: "turn", text: "try" });
   await new Promise((resolve) => setTimeout(resolve, 80));
-  assert.match(observed?.summary ?? "", /rm -rf \/tmp\/example/u);
+  assert.match(observed?.summary ?? "", /--final-marker/u);
+  assert.match(observed?.summary ?? "", new RegExp(completeCommand.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
   assert.doesNotMatch(observed?.summary ?? "", /secret-value/u);
   assert.equal(observed?.risk, "high");
   assert.match(observed?.actionDigest ?? "", /authorization.*Bearer secret-value/u);

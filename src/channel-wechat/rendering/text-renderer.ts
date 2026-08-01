@@ -1,4 +1,4 @@
-import { normalizeInlineText, summarizeText } from "../../core/application/mobile-text.js";
+import { normalizeInlineText } from "../../core/application/mobile-text.js";
 import type {
   AgentApprovalRequest,
   MobileApprovalLease
@@ -46,7 +46,7 @@ export function renderApprovalRequest(
   return [
     `审批 · ${riskLabel(request.risk)} · ${context.sessionName}`,
     `项目：${context.project}`,
-    `操作：${summarizeText(normalizeInlineText(request.summary), 80)}`,
+    `操作：${normalizeApprovalText(request.summary)}`,
     renderApprovalExpiry(lease.expiresAt, context.now),
     commands
   ].join("\n");
@@ -69,6 +69,14 @@ function riskLabel(risk: AgentApprovalRequest["risk"]): string {
   if (risk === "high") return "高风险";
   if (risk === "medium") return "中风险";
   return "低风险";
+}
+
+function normalizeApprovalText(text: string): string {
+  const normalized = text
+    .replace(/\r\n?/gu, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, " ")
+    .trim();
+  return normalized === "" ? "（空操作）" : normalized;
 }
 
 function renderApprovalExpiry(expiresAt: string, now: string): string {

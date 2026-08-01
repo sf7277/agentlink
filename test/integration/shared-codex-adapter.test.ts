@@ -60,8 +60,9 @@ test("shared adapter isolates two interleaved threads, Turns and approvals", asy
   assert.equal(turnParams["approvalPolicy"], undefined);
   assert.deepEqual(started.sort(), ["session-a:gateway-turn-a", "session-b:gateway-turn-b"]);
 
+  const completeCommand = `/bin/zsh -lc '${"echo safe-step ".repeat(24)}--final-marker'`;
   const commandRequestId = transport.request("item/commandExecution/requestApproval", {
-    threadId: "thread-2", turnId: turnB.nativeTurnId, itemId: "item-b", command: "echo B"
+    threadId: "thread-2", turnId: turnB.nativeTurnId, itemId: "item-b", command: completeCommand
   });
   const fileRequestId = transport.request("item/fileChange/requestApproval", {
     threadId: "thread-1", turnId: turnA.nativeTurnId, itemId: "item-a", reason: "write A"
@@ -78,6 +79,8 @@ test("shared adapter isolates two interleaved threads, Turns and approvals", asy
   assert.ok(commandApproval);
   assert.ok(fileApproval);
   assert.ok(permissionsApproval);
+  assert.equal(commandApproval.summary, `Codex请求执行命令：${completeCommand}`);
+  assert.doesNotMatch(commandApproval.summary, /…/u);
   assert.equal(permissionsApproval.nativeItemId, "item-p");
   assert.deepEqual(await adapter.inspectApproval(commandApproval.id), {
     status: "pending",

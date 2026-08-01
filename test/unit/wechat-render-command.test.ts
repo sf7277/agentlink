@@ -297,3 +297,39 @@ test("approval rendering is compact for one request and numbered for multiple re
   );
   assert.doesNotMatch(listItem, /…|5m/u);
 });
+
+test("approval rendering preserves the complete operation and lets the channel chunk it", () => {
+  const completeSummary = `Codex请求执行命令：/bin/zsh -lc '${"echo safe-step ".repeat(18)}--final-marker'`;
+  const request = {
+    id: "long-request",
+    nativeRequestId: "native-long-request",
+    nativeItemId: "long-item",
+    sessionId: "session-long",
+    turnId: "turn-long",
+    actionKind: "command",
+    actionDigest: "sha256:long-example",
+    summary: completeSummary,
+    risk: "high" as const,
+    observedAt: "2026-07-19T00:00:00.000Z"
+  };
+  const lease = {
+    id: "LONG",
+    requestId: request.id,
+    controllerEndpointId: "wechat-owner",
+    actionDigest: request.actionDigest,
+    state: "ACTIVE" as const,
+    expiresAt: "2026-07-19T00:05:00.000Z"
+  };
+  const text = renderApprovalRequest(request, lease, {
+    sessionName: "AgentLink 验收",
+    project: "agentlink",
+    now: "2026-07-19T00:00:00.000Z",
+    multiple: false
+  });
+  assert.ok(text.includes(completeSummary));
+  assert.doesNotMatch(text, /…/u);
+
+  const chunks = new WechatTextRenderer({ maxChunkCharacters: 64 }).chunks(text);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.some((chunk) => chunk.includes("--final-marker")));
+});

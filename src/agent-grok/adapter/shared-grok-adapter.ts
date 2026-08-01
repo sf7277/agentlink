@@ -581,8 +581,16 @@ function permissionSummary(toolCall: {
 } | undefined, displayInput: string): string {
   const title = toolCall?.title?.trim();
   const prefix = `Grok ${toolCall?.kind ?? "unknown"}`;
-  return `${prefix}${title === undefined || title === "" ? "" : `: ${title.slice(0, 120)}`} | ${displayInput}`
-    .slice(0, 400);
+  const command = commandFromRawInput(toolCall?.rawInput);
+  const summary = `${prefix}${title === undefined || title === "" ? "" : `: ${title.slice(0, 120)}`} | ` +
+    (command ?? displayInput);
+  return command === undefined ? summary.slice(0, 400) : summary;
+}
+
+function commandFromRawInput(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const command = (value as Record<string, unknown>)["command"];
+  return typeof command === "string" ? command : undefined;
 }
 
 function riskForKind(kind: string | undefined): "low" | "medium" | "high" {

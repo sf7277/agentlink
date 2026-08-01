@@ -942,9 +942,9 @@ function unixSecondsToIso(value: number): string {
 function approvalSummary(kind: ApprovalKind, params: unknown): string {
   const value = params as Record<string, unknown>;
   if (kind === "command" && typeof value["command"] === "string") {
-    return `Codex请求执行命令：${value["command"].slice(0, 240)}`;
+    return `Codex请求执行命令：${value["command"]}`;
   }
-  if (typeof value["reason"] === "string") return `Codex请求${kind}权限：${value["reason"].slice(0, 240)}`;
+  if (typeof value["reason"] === "string") return `Codex请求${kind}权限：${value["reason"]}`;
   return `Codex请求${kind}权限`;
 }
 

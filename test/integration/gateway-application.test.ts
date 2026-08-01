@@ -203,15 +203,16 @@ test("product composition creates a Session, deduplicates mobile input and resol
   await message("m-renamed", "/sessions");
   assert.match(channel.sent.at(-1)?.text ?? "", /修复移动端会话体验/u);
 
+  const completeApprovalSummary = `Codex请求执行命令：/bin/zsh -lc '${"echo safe-step ".repeat(18)}--final-marker'`;
   application.approvalRequested({
     id: "approval-request-1",
     nativeRequestId: "native-request-1",
     nativeItemId: "item-1",
     sessionId: "session-1",
     turnId: agent.sent[0]!.turnId,
-    actionKind: "permissions",
+    actionKind: "command",
     actionDigest: "digest-1",
-    summary: "申请网络权限",
+    summary: completeApprovalSummary,
     risk: "high",
     observedAt: clock.now()
   });
@@ -222,6 +223,8 @@ test("product composition creates a Session, deduplicates mobile input and resol
   );
   const approvalText = channel.sent.at(-1)?.text ?? "";
   assert.match(approvalText, /允许 \/approve · 拒绝 \/deny · 停止 \/cancel/u);
+  assert.ok(approvalText.includes(completeApprovalSummary));
+  assert.doesNotMatch(approvalText, /…/u);
   assert.doesNotMatch(approvalText, /approval-|request-/u);
   await message("m3", "/approve");
   assert.deepEqual(agent.decisions, [{

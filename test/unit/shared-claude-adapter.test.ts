@@ -124,14 +124,16 @@ test("SharedClaudeAdapter surfaces approvals, honors allow_once, and rejects ste
     }
   });
   sdk.permissionMode = "request";
-  sdk.permissionToolInput = { command: "rm -rf /tmp/example", authorization: "Bearer secret-value" };
+  const completeCommand = `/bin/zsh -lc '${"echo safe-step ".repeat(24)}--final-marker'`;
+  sdk.permissionToolInput = { command: completeCommand, authorization: "Bearer secret-value" };
   await adapter.create(claudeSession("session-2"));
   await adapter.sendTurn({ sessionId: "session-2", turnId: "turn-2", text: "write" });
   await new Promise((resolve) => setTimeout(resolve, 40));
   assert.equal(approvals.length, 1);
   assert.equal(approvals[0]?.actionKind, "command");
   assert.equal(approvals[0]?.risk, "high");
-  assert.match(approvals[0]?.summary ?? "", /rm -rf \/tmp\/example/u);
+  assert.match(approvals[0]?.summary ?? "", /--final-marker/u);
+  assert.match(approvals[0]?.summary ?? "", new RegExp(completeCommand.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
   assert.doesNotMatch(approvals[0]?.summary ?? "", /secret-value/u);
   assert.match(approvals[0]?.actionDigest ?? "", /Bearer secret-value/u);
   assert.deepEqual(completed, [{
