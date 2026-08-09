@@ -8,6 +8,7 @@
     "thread/resume",
     "thread/archive",
     "thread/unarchive",
+    "thread/delete",
     "thread/list",
     "thread/read",
     "thread/inject_items",

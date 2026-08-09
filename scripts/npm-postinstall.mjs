@@ -8,11 +8,18 @@ if (nodeMajor < 22) {
     `AgentLink npm installation requires Node.js 22 or later; found ${process.versions.node}`
   );
 }
+if (process.platform === "win32") {
+  if (process.arch !== "x64") {
+    throw new Error(`AgentLink Windows npm installation supports x64 only; found ${process.arch}`);
+  }
+  process.stdout.write("AgentLink Windows installation: native macOS helpers skipped.\n");
+  process.exit(0);
+}
 if (process.platform !== "darwin") {
-  throw new Error(`AgentLink npm installation supports macOS only; found ${process.platform}`);
+  throw new Error(`AgentLink npm installation supports macOS and Windows only; found ${process.platform}`);
 }
 if (process.arch !== "arm64" && process.arch !== "x64") {
-  throw new Error(`AgentLink npm installation supports arm64 or x64; found ${process.arch}`);
+  throw new Error(`AgentLink macOS npm installation supports arm64 or x64; found ${process.arch}`);
 }
 
 const root = resolve(import.meta.dirname, "..");

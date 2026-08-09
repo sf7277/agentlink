@@ -2,24 +2,31 @@
 import { spawn } from "node:child_process";
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { IlinkQrLogin } from "./channel-wechat/adapter/qr-login.js";
 import { IlinkHttpClient } from "./channel-wechat/protocol/http-client.js";
 import { assertTrustedIlinkBaseUrl } from "./channel-wechat/protocol/url-policy.js";
-import { sendControlEvent } from "./local-control/client/unix-control-client.js";
+import { sendControlEvent } from "./local-control/client/control-client.js";
 import {
-  ensureMacosApplicationPaths,
-  macosApplicationPaths
-} from "./platform-macos/application-paths.js";
+  applicationPaths,
+  configDocumentStore,
+  credentialStore,
+  ensureApplicationPaths
+} from "./platform/factory.js";
 import {
   diagnoseAgentLink,
   readAgentLinkLogs
 } from "./platform-macos/diagnostics-service.js";
-import { KeychainCredentialStore } from "./platform-macos/keychain-credential-store.js";
+import {
+  diagnoseWindowsAgentLink,
+  readWindowsAgentLinkLogs
+} from "./platform-windows/diagnostics-service.js";
 import { LaunchAgentService } from "./platform-macos/launch-agent-service.js";
 import { BrowserQrPresenter } from "./platform-macos/browser-qr-presenter.js";
+import { WindowsBrowserQrPresenter } from "./platform-windows/browser-qr-presenter.js";
+import { renderWindowsQr } from "./platform-windows/qr-code-renderer.js";
 import { AtomicConfigStore } from "./platform-macos/atomic-config-store.js";
 import { ProjectConfigService } from "./platform-macos/project-config-service.js";
 import {
@@ -87,12 +94,17 @@ async function runAgent(args: string[]): Promise<number> {
   const action = args.shift();
   const maybeAgent = action === "list" ? undefined : args.shift();
   const options = parseOptions(args);
-  const paths = macosApplicationPaths();
-  await ensureMacosApplicationPaths(paths);
+  const paths = applicationPaths();
+  await ensureApplicationPaths(paths);
   if (await lstat(paths.config).catch(() => undefined) === undefined) {
-    await new AtomicConfigStore(paths.config).save({});
+    await configDocumentStore(paths.config).save({});
   }
-  const service = new AgentConfigService(paths.config, paths.runtime);
+  const service = new AgentConfigService(
+    paths.config,
+    paths.runtime,
+    undefined,
+    configDocumentStore(paths.config)
+  );
   if (action === "list") {
     assertAllowedOptions(options, []);
     writeOutput(options, await service.list());
@@ -114,7 +126,7 @@ async function runAgent(args: string[]): Promise<number> {
   }
   if (action === "configure") {
     assertAllowedOptions(options, ["command", "isolated-home-root"]);
-    const previous = await new AtomicConfigStore(paths.config).load();
+    const previous = await configDocumentStore(paths.config).load();
     const configured = await service.configure({
       agent,
       command: requiredOption(options, "command"),
@@ -132,7 +144,7 @@ async function runAgent(args: string[]): Promise<number> {
     if (await hasStoredAgentSessions(paths.database, agent)) {
       throw new Error(`Agent still has stored Sessions: ${agent}`);
     }
-    const previous = await new AtomicConfigStore(paths.config).load();
+    const previous = await configDocumentStore(paths.config).load();
     await service.remove(agent);
     await restartAfterConfigChange(paths, previous);
     writeOutput(options, { status: "removed", agent });
@@ -143,16 +155,17 @@ async function runAgent(args: string[]): Promise<number> {
 }
 
 async function restartAfterConfigChange(
-  paths: ReturnType<typeof macosApplicationPaths>,
+  paths: ReturnType<typeof applicationPaths>,
   previous: Awaited<ReturnType<AtomicConfigStore["load"]>>
 ): Promise<void> {
+  if (process.platform === "win32") return;
   const launchAgent = new LaunchAgentService({ paths });
   const status = await launchAgent.status();
   if (!status.loaded) return;
   try {
     await launchAgent.restart();
   } catch (error) {
-    await new AtomicConfigStore(paths.config).save(previous);
+    await configDocumentStore(paths.config).save(previous);
     await launchAgent.restart().catch(() => undefined);
     throw error;
   }
@@ -187,11 +200,11 @@ async function runChannel(args: string[]): Promise<number> {
   }
   const options = parseOptions(args);
   assertAllowedOptions(options, ["socket", "endpoint"]);
-  const paths = macosApplicationPaths();
+  const paths = applicationPaths();
   const socket = options.get("socket") ?? paths.socket;
   if (await lstat(socket).catch(() => undefined) === undefined) {
     const configured = await lstat(paths.config).then(
-      () => new AtomicConfigStore(paths.config).load().then((config) => config.wechat !== undefined),
+      () => configDocumentStore(paths.config).load().then((config) => config.wechat !== undefined),
       () => false
     );
     writeOutput(options, { channel: "wechat", status: configured ? "UNKNOWN" : "DISABLED" });
@@ -212,7 +225,7 @@ async function runDisconnect(args: string[]): Promise<number> {
   }
   const options = parseOptions(args);
   assertAllowedOptions(options, ["socket", "endpoint"]);
-  const paths = macosApplicationPaths();
+  const paths = applicationPaths();
   const socket = options.get("socket") ?? paths.socket;
   let mobileNotice: unknown = { attempted: 0, delivered: 0 };
   if (await lstat(socket).catch(() => undefined) !== undefined) {
@@ -223,14 +236,15 @@ async function runDisconnect(args: string[]): Promise<number> {
     }) as { mobileNotice?: unknown };
     mobileNotice = response.mobileNotice ?? mobileNotice;
   }
-  const service = new LaunchAgentService({ paths });
+  const service = process.platform === "darwin" ? new LaunchAgentService({ paths }) : undefined;
   try {
     const result = await new WechatDisconnectService(
       paths.config,
-      new KeychainCredentialStore()
+      credentialStore(),
+      configDocumentStore(paths.config)
     ).disconnect();
-    const status = await service.status();
-    if (status.loaded) await service.restart();
+    const status = service === undefined ? { loaded: false } : await service.status();
+    if (status.loaded && service !== undefined) await service.restart();
     writeOutput(options, {
       ...result,
       localOnly: true,
@@ -239,8 +253,8 @@ async function runDisconnect(args: string[]): Promise<number> {
     });
     return 0;
   } catch (error) {
-    const status = await service.status().catch(() => undefined);
-    if (status?.loaded) await service.restart().catch(() => undefined);
+    const status = await service?.status().catch(() => undefined);
+    if (status?.loaded && service !== undefined) await service.restart().catch(() => undefined);
     throw error;
   }
 }
@@ -248,7 +262,10 @@ async function runDisconnect(args: string[]): Promise<number> {
 async function runService(args: string[]): Promise<number> {
   const action = args.shift();
   const options = parseOptions(args);
-  const paths = macosApplicationPaths();
+  if (process.platform === "win32") {
+    throw new Error("Windows foreground mode does not support LaunchAgent lifecycle commands");
+  }
+  const paths = applicationPaths();
   const service = new LaunchAgentService({ paths });
   if (action === "install") {
     assertAllowedOptions(options, ["release", "confirm-local"]);
@@ -280,7 +297,7 @@ async function runService(args: string[]): Promise<number> {
     const credentialReferences = (options.get("credential-references") ?? "")
       .split(",")
       .filter((value) => value !== "");
-    const credentials = new KeychainCredentialStore();
+    const credentials = credentialStore();
     await service.purge({
       uninstallConfirmation: "UNINSTALL_AGENTLINK_LOCALLY",
       destructiveConfirmation: "DELETE_AGENTLINK_DATA",
@@ -317,7 +334,10 @@ async function runLifecycle(
 ): Promise<number> {
   const options = parseOptions(args);
   assertAllowedOptions(options, []);
-  const service = new LaunchAgentService({ paths: macosApplicationPaths() });
+  if (process.platform === "win32") {
+    throw new Error("Windows foreground mode does not support background lifecycle commands");
+  }
+  const service = new LaunchAgentService({ paths: applicationPaths() as import("./platform-macos/application-paths.js").MacosApplicationPaths });
   writeOutput(options, await service[action]());
   return 0;
 }
@@ -326,7 +346,10 @@ async function runLogs(args: string[]): Promise<number> {
   const options = parseOptions(args);
   assertAllowedOptions(options, ["lines"]);
   const lines = Number.parseInt(options.get("lines") ?? "200", 10);
-  const logs = await readAgentLinkLogs(macosApplicationPaths(), lines);
+  const paths = applicationPaths();
+  const logs = process.platform === "win32"
+    ? await readWindowsAgentLinkLogs(paths, lines)
+    : await readAgentLinkLogs(paths as import("./platform-macos/application-paths.js").MacosApplicationPaths, lines);
   if (options.has("json")) {
     writeJson(logs);
     return 0;
@@ -339,7 +362,12 @@ async function runLogs(args: string[]): Promise<number> {
 async function runDoctor(args: string[]): Promise<number> {
   const options = parseOptions(args);
   assertAllowedOptions(options, []);
-  const paths = macosApplicationPaths();
+  if (process.platform === "win32") {
+    const diagnosis = await diagnoseWindowsAgentLink(applicationPaths());
+    writeOutput(options, diagnosis);
+    return diagnosis.ok === true ? 0 : 1;
+  }
+  const paths = applicationPaths();
   const diagnosis = await diagnoseAgentLink(
     paths,
     new LaunchAgentService({ paths }),
@@ -366,9 +394,9 @@ async function runDoctor(args: string[]): Promise<number> {
 async function runProject(args: string[]): Promise<number> {
   const action = args.shift();
   const options = parseOptions(args);
-  const paths = macosApplicationPaths();
-  await ensureMacosApplicationPaths(paths);
-  const projects = new ProjectConfigService(paths.config);
+  const paths = applicationPaths();
+  await ensureApplicationPaths(paths);
+  const projects = new ProjectConfigService(paths.config, configDocumentStore(paths.config));
   if (action === "list") {
     assertAllowedOptions(options, []);
     writeOutput(options, await projects.list());
@@ -458,8 +486,8 @@ async function runPair(args: string[]): Promise<number> {
     "gateway-user",
     "qr-output"
   ]);
-  const paths = macosApplicationPaths();
-  await ensureMacosApplicationPaths(paths);
+  const paths = applicationPaths();
+  await ensureApplicationPaths(paths);
   const baseUrl = assertTrustedIlinkBaseUrl(
     options.get("base-url") ?? "https://ilinkai.weixin.qq.com"
   );
@@ -471,9 +499,16 @@ async function runPair(args: string[]): Promise<number> {
   const qrOutput = options.get("qr-output") === undefined
     ? undefined
     : resolve(options.get("qr-output")!);
-  const credentials = new KeychainCredentialStore();
+  const credentials = credentialStore();
   const presenter = qrOutput === undefined
-    ? new BrowserQrPresenter({
+    ? process.platform === "win32"
+      ? new WindowsBrowserQrPresenter({
+        render: renderWindowsQr,
+        onOpenFailure: (url) => {
+          process.stdout.write(`浏览器未自动打开，请访问：${url}\n`);
+        }
+      })
+      : new BrowserQrPresenter({
         render: renderQr,
         onOpenFailure: (url) => {
           process.stdout.write(`浏览器未自动打开，请访问：${url}\n`);
@@ -489,7 +524,8 @@ async function runPair(args: string[]): Promise<number> {
     const result = await new WechatPairingService(
       paths.config,
       new IlinkQrLogin(new IlinkHttpClient({ baseUrl }), credentials),
-      credentials
+      credentials,
+      configDocumentStore(paths.config)
     ).pair({
       baseUrl,
       credentialReference,
@@ -497,7 +533,7 @@ async function runPair(args: string[]): Promise<number> {
       signal: controller.signal,
       display: async (content) => {
         if (qrOutput !== undefined) {
-          await renderQr(content, qrOutput);
+          await (process.platform === "win32" ? renderWindowsQr : renderQr)(content, qrOutput);
           process.stdout.write(`QR_READY ${qrOutput}\n`);
           return;
         }
@@ -507,28 +543,38 @@ async function runPair(args: string[]): Promise<number> {
         } catch {
           fallbackDirectory = await mkdtemp(join(tmpdir(), "agentlink-pair-fallback-"));
           await chmod(fallbackDirectory, 0o700);
-          const fallbackPath = join(fallbackDirectory, "wechat-login.png");
-          await renderQr(content, fallbackPath);
+          const fallbackPath = join(
+            fallbackDirectory,
+            process.platform === "win32" ? "wechat-login.svg" : "wechat-login.png"
+          );
+          await (process.platform === "win32" ? renderWindowsQr : renderQr)(content, fallbackPath);
           await chmod(fallbackPath, 0o600);
           process.stdout.write(`浏览器配对页不可用，请打开临时二维码：${fallbackPath}\n`);
         }
       }
     });
     await presenter?.finish("paired");
-    const launchAgent = new LaunchAgentService({ paths });
-    const serviceStatus = await launchAgent.status();
-    const pairedConfig = await new AtomicConfigStore(paths.config).load();
+    const serviceStatus = process.platform === "darwin"
+      ? await new LaunchAgentService({ paths }).status()
+      : { loaded: false };
+    const pairedConfig = await configDocumentStore(paths.config).load();
     const hasAgent = pairedConfig.codex !== undefined ||
       pairedConfig.grok !== undefined ||
       pairedConfig.claude !== undefined;
-    if (serviceStatus.loaded && hasAgent) await launchAgent.restart();
+    if (serviceStatus.loaded && hasAgent && process.platform === "darwin") {
+      await new LaunchAgentService({ paths }).restart();
+    }
+    const windowsAutoReloadHint =
+      process.platform === "win32" && hasAgent
+        ? "正在运行的前台 Gateway 会自动加载微信渠道，无需手动重启"
+        : undefined;
     writeOutput(options, {
       status: "paired",
       ...result,
       gatewayRestarted: serviceStatus.loaded && hasAgent,
-      ...(hasAgent ? {} : {
-        nextAction: "尚未配置Agent，请执行 agentlink agent configure"
-      })
+      ...(hasAgent
+        ? (windowsAutoReloadHint === undefined ? {} : { nextAction: windowsAutoReloadHint })
+        : { nextAction: "尚未配置Agent，请执行 agentlink agent configure" })
     });
     return 0;
   } catch (error) {
@@ -560,7 +606,7 @@ async function runSession(args: string[]): Promise<number> {
     if (action !== "delete" && options.has("confirm")) {
       throw new Error(`session ${String(action)} does not accept --confirm`);
     }
-    const socket = options.get("socket") ?? macosApplicationPaths().socket;
+    const socket = options.get("socket") ?? applicationPaths().socket;
     const endpointId = options.get("endpoint") ?? "local-cli";
     writeOutput(options, await sendControlEvent(socket, {
       endpointId,
@@ -576,7 +622,7 @@ async function runSession(args: string[]): Promise<number> {
     options,
     ["project", "agent", "socket", "endpoint", "number", "archived", "all"]
   );
-  const socket = options.get("socket") ?? macosApplicationPaths().socket;
+  const socket = options.get("socket") ?? applicationPaths().socket;
   const endpointId = options.get("endpoint") ?? "local-cli";
   if (action === "list") {
     if (options.has("number") || options.has("agent")) {
@@ -633,7 +679,7 @@ async function runAttach(args: string[]): Promise<number> {
   const options = parseOptions(args);
   assertAllowedOptions(options, ["socket", "endpoint", "text"]);
   if (sessionId === undefined) throw new Error("attach requires a Session ID");
-  const socket = options.get("socket") ?? macosApplicationPaths().socket;
+  const socket = options.get("socket") ?? applicationPaths().socket;
   const endpoint = options.get("endpoint") ?? "local-cli";
   const text = options.get("text");
   if (text !== undefined) {
@@ -803,9 +849,10 @@ function formatDoctor(value: Readonly<Record<string, unknown>>): string {
   const runtime = asRecord(value["runtime"]);
   const service = asRecord(value["service"]);
   const channel = asRecord(value["channel"]);
+  const runtimeDistribution = runtime?.["releaseVersion"] ?? runtime?.["distribution"] ?? "未安装";
   return [
     `诊断：${value["ok"] === true ? "通过" : "发现问题"}`,
-    `运行时：${String(runtime?.["version"] ?? "未知")} · ${String(runtime?.["releaseVersion"] ?? "未安装")}`,
+    `运行时：${String(runtime?.["version"] ?? "未知")} · ${String(runtimeDistribution)}`,
     `服务：${service?.["loaded"] === true ? "运行中" : "未运行"}`,
     `微信：${String(channel?.["status"] ?? "未知")}`,
     "详情：agentlink doctor --json"
@@ -980,7 +1027,15 @@ const commandUsage: Readonly<Record<string, string>> = {
 };
 
 const entrypoint = process.argv[1];
-if (entrypoint !== undefined && pathToFileURL(entrypoint).href === import.meta.url) {
+const entrypointPath = entrypoint === undefined ? undefined : resolve(entrypoint);
+const modulePath = fileURLToPath(import.meta.url);
+const isEntrypoint = entrypointPath !== undefined && (
+  process.platform === "win32"
+    ? entrypointPath.toLowerCase() === modulePath.toLowerCase()
+      || basename(entrypointPath).toLowerCase() === "ctl.js"
+    : entrypointPath === modulePath
+);
+if (isEntrypoint) {
   try {
     process.exitCode = await runCtl(process.argv.slice(2));
   } catch (error) {

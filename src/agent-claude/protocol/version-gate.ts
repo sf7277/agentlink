@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { captureCommandOutput } from "../../platform-windows/process-control.js";
 
 /**
  * Minimum Claude Code CLI verified against the pinned Agent SDK.
@@ -50,17 +47,24 @@ export function assertSupportedClaudeVersion(
 }
 
 export async function readClaudeVersion(command: string): Promise<ClaudeVersion> {
-  const { stdout } = await execFileAsync(command, ["--version"], {
-    timeout: 30_000,
-    maxBuffer: 64 * 1024,
-    encoding: "utf8",
+  const stdout = await captureCommandOutput(command, ["--version"], {
+    timeoutMs: 30_000,
+    maxBytes: 64 * 1024,
     // The version probe must not inherit ambient configuration.
-    env: {
-      PATH: process.env["PATH"] ?? "",
-      HOME: process.env["HOME"] ?? "",
-      TMPDIR: process.env["TMPDIR"] ?? "/tmp",
-      USER: process.env["USER"] ?? ""
-    }
+    env: process.platform === "win32"
+      ? {
+        Path: process.env["Path"] ?? process.env["PATH"] ?? "",
+        USERPROFILE: process.env["USERPROFILE"] ?? "",
+        LOCALAPPDATA: process.env["LOCALAPPDATA"] ?? "",
+        TEMP: process.env["TEMP"] ?? "",
+        TMP: process.env["TMP"] ?? ""
+      }
+      : {
+        PATH: process.env["PATH"] ?? "",
+        HOME: process.env["HOME"] ?? "",
+        TMPDIR: process.env["TMPDIR"] ?? "/tmp",
+        USER: process.env["USER"] ?? ""
+      }
   });
   return parseClaudeVersion(stdout);
 }

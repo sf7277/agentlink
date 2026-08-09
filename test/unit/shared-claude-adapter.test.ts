@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { SharedClaudeAdapter } from "../../src/agent-claude/adapter/shared-claude-adapter.js";
@@ -237,7 +238,7 @@ test("SharedClaudeAdapter resume disposes the superseded handle and ignores its 
 });
 
 test("SharedClaudeAdapter keeps live sessions out of the missing-native reconciliation", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-live-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-live-"));
   const { adapter } = harness({ claudeHome });
   const session = claudeSession("live");
   const created = await adapter.create(session);
@@ -293,7 +294,7 @@ test("SharedClaudeAdapter close is a definite unsupported rejection", async () =
 });
 
 test("SharedClaudeAdapter deletes only AGENTLINK-owned session files", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-adapter-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-adapter-"));
   const projectDirectory = join(
     claudeHome,
     "projects",
@@ -328,7 +329,7 @@ test("SharedClaudeAdapter deletes only AGENTLINK-owned session files", async () 
 });
 
 test("SharedClaudeAdapter reports externally deleted session files as missing", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-catalog-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-catalog-"));
   const projectDirectory = join(
     claudeHome,
     "projects",
@@ -364,7 +365,7 @@ test("SharedClaudeAdapter surfaces unexpected session exit and forgets the sessi
 });
 
 test("SharedClaudeAdapter discovery lists only importable sessions for this project", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-discover-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-discover-"));
   const projectDirectory = join(
     claudeHome,
     "projects",
@@ -414,7 +415,7 @@ test("SharedClaudeAdapter discovery lists only importable sessions for this proj
 });
 
 test("SharedClaudeAdapter import adopts the chosen session as EXTERNAL without copying history", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-import-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-import-"));
   const projectDirectory = join(
     claudeHome,
     "projects",
@@ -462,7 +463,7 @@ test("SharedClaudeAdapter import adopts the chosen session as EXTERNAL without c
 });
 
 test("SharedClaudeAdapter import refuses a missing session and rollback keeps native data", async () => {
-  const claudeHome = await mkdtemp("/tmp/agentlink-claude-import-fail-");
+  const claudeHome = await mkdtemp(join(tmpdir(), "agentlink-claude-import-fail-"));
   await mkdir(join(claudeHome, "projects", encodedClaudeProjectDirectory(PROJECT_ROOT)), {
     recursive: true
   });

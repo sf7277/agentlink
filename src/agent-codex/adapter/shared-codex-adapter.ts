@@ -40,7 +40,7 @@ const turnCompletedSchema = z.object({
   threadId: z.string().min(1),
   turn: z.object({
     id: z.string().min(1),
-    status: z.enum(["completed", "interrupted", "failed", "inProgress"])
+    status: z.string().min(1)
   }).passthrough()
 }).passthrough();
 const itemCompletedSchema = z.object({
@@ -61,12 +61,12 @@ const threadReadSchema = z.object({
     id: z.string().min(1),
     name: z.string().nullable().optional(),
     status: z.object({
-      type: z.enum(["notLoaded", "idle", "systemError", "active"]),
+      type: z.string().min(1),
       activeFlags: z.array(z.string()).optional()
     }).passthrough(),
     turns: z.array(z.object({
       id: z.string().min(1),
-      status: z.enum(["completed", "interrupted", "failed", "inProgress"])
+      status: z.string().min(1)
     }).passthrough())
   }).passthrough()
 }).passthrough();
@@ -90,13 +90,13 @@ const externalThreadSchema = z.object({
     z.object({ subAgent: z.unknown() }).passthrough()
   ]),
   status: z.object({
-    type: z.enum(["notLoaded", "idle", "systemError", "active"])
+    type: z.string().min(1)
   }).passthrough(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   turns: z.array(z.object({
     id: z.string().min(1),
-    status: z.enum(["completed", "interrupted", "failed", "inProgress"])
+    status: z.string().min(1)
   }).passthrough()).default([])
 }).passthrough();
 const threadListSchema = z.object({
@@ -712,7 +712,9 @@ export class SharedCodexAdapter implements AgentPort {
       } else if (method === "turn/completed") {
         const parsed = turnCompletedSchema.parse(params);
         const route = this.requireRoute(parsed.threadId, parsed.turn.id);
-        if (parsed.turn.status === "inProgress") throw new Error("turn/completed cannot be inProgress");
+        if (!isTerminalTurnStatus(parsed.turn.status)) {
+          throw new Error(`turn/completed has unknown terminal status: ${parsed.turn.status}`);
+        }
         const finalResponse = this.#finalResponseByNativeTurn.get(parsed.turn.id);
         this.#pendingGatewayTurnByThread.delete(parsed.threadId);
         this.releaseCapacity(parsed.threadId);
@@ -898,6 +900,10 @@ function isImportableThread(
     !thread.turns.some((turn) => turn.status === "inProgress");
 }
 
+function isTerminalTurnStatus(status: string): status is "completed" | "interrupted" | "failed" {
+  return status === "completed" || status === "interrupted" || status === "failed";
+}
+
 function assertImportableThread(
   thread: z.infer<typeof externalThreadSchema>,
   expectedId: string,
@@ -914,8 +920,7 @@ function assertImportableThread(
     throw new Error("Codex sub-agent or unknown-source threads cannot be imported");
   }
   if (
-    thread.status.type === "active" ||
-    thread.status.type === "systemError" ||
+    (thread.status.type !== "idle" && thread.status.type !== "notLoaded") ||
     thread.turns.some((turn) => turn.status === "inProgress")
   ) {
     throw new Error("Codex thread is active or cannot be safely imported");

@@ -2,62 +2,13 @@ import { chmod, lstat, unlink } from "node:fs/promises";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { dirname } from "node:path";
-import { z } from "zod";
+import { ZodError } from "zod";
 import type {
   LocalControlEvent,
   LocalControlPort
 } from "../../core/contracts/ports.js";
 import { sanitizeDiagnostic } from "../../core/application/safe-diagnostics.js";
-
-const turnRequestSchema = z.object({
-  endpointId: z.string().min(1).max(128),
-  sessionId: z.string().min(1).max(128),
-  text: z.string().max(32 * 1024),
-  kind: z.enum(["input", "steer", "stop", "close"])
-}).strict();
-const requestSchema = z.discriminatedUnion("kind", [
-  turnRequestSchema,
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.literal("session_discover"),
-    project: z.string().min(1).max(63),
-    agent: z.enum(["codex", "grok"]).optional()
-  }).strict(),
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.literal("session_import"),
-    project: z.string().min(1).max(63),
-    reference: z.string().regex(/^[1-9]\d*$/u),
-    agent: z.enum(["codex", "grok"]).optional()
-  }).strict(),
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.literal("session_list"),
-    project: z.string().min(1).max(63).optional(),
-    scope: z.enum(["active", "archived", "all"])
-  }).strict(),
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.enum([
-      "session_show",
-      "session_archive",
-      "session_unarchive",
-      "session_delete",
-      "session_detach"
-    ]),
-    sessionId: z.string().min(1).max(128)
-  }).strict(),
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.enum(["project_disable", "project_enable", "project_remove"]),
-    project: z.string().min(1).max(63)
-  }).strict(),
-  z.object({
-    endpointId: z.string().min(1).max(128),
-    kind: z.enum(["channel_status", "channel_disconnect"]),
-    channel: z.literal("wechat")
-  }).strict()
-]);
+import { parseLocalControlEvent } from "../protocol.js";
 
 export interface UnixControlServerOptions {
   readonly maxLineBytes?: number;
@@ -150,7 +101,7 @@ export class UnixControlServer implements LocalControlPort {
         throw new Error("Local control request exceeds size limit");
       }
       this.assertRate();
-      const event = requestSchema.parse(JSON.parse(line) as unknown);
+      const event = parseLocalControlEvent(JSON.parse(line) as unknown);
       if (!this.#allowedEndpointIds.has(event.endpointId)) {
         throw new Error("Local control endpoint is not authorized");
       }
@@ -160,7 +111,7 @@ export class UnixControlServer implements LocalControlPort {
         ...(result === undefined ? {} : { result })
       })}\n`);
     } catch (error) {
-      const message = error instanceof z.ZodError || error instanceof SyntaxError
+      const message = error instanceof ZodError || error instanceof SyntaxError
         ? "Invalid local control request"
         : sanitizeDiagnostic(error instanceof Error ? error.message : "Invalid request");
       socket.write(`${JSON.stringify({ ok: false, error: message })}\n`);

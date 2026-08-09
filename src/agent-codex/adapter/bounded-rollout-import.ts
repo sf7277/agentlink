@@ -3,6 +3,7 @@ import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { createInterface } from "node:readline";
+import { assertWindowsPrivatePath } from "../../platform-windows/security.js";
 
 export const LARGE_ROLLOUT_THRESHOLD_BYTES = 8 * 1024 * 1024;
 export const MAX_IMPORT_TOKENS = 65_536;
@@ -53,11 +54,15 @@ export async function prepareBoundedRolloutImport(
   if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
     throw new Error("Codex rollout is not a regular file");
   }
-  if (typeof process.getuid === "function" && sourceStat.uid !== process.getuid()) {
-    throw new Error("Codex rollout is not owned by the current user");
-  }
-  if ((sourceStat.mode & 0o022) !== 0) {
-    throw new Error("Codex rollout is writable by another user");
+  if (process.platform === "win32") {
+    await assertWindowsPrivatePath(sourcePath, "file");
+  } else {
+    if (typeof process.getuid === "function" && sourceStat.uid !== process.getuid()) {
+      throw new Error("Codex rollout is not owned by the current user");
+    }
+    if ((sourceStat.mode & 0o022) !== 0) {
+      throw new Error("Codex rollout is writable by another user");
+    }
   }
   if (sourceStat.size > MAX_ROLLOUT_BYTES) throw new Error("Codex rollout exceeds the safe import limit");
   if (sourceStat.size <= (options.largeThresholdBytes ?? LARGE_ROLLOUT_THRESHOLD_BYTES)) {

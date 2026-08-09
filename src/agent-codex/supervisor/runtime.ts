@@ -1,9 +1,11 @@
 import { JsonlRpcClient, type JsonlRpcClientOptions } from "../protocol/jsonl-rpc-client.js";
 import {
   assertSupportedVersion,
+  isVerifiedVersion,
   readCodexVersion,
   type VersionSupport
 } from "../protocol/version-gate.js";
+import { assertCodexProtocolCompatible } from "../protocol/compatibility-gate.js";
 import {
   ChildProcessTransport,
   type ChildTransportOptions
@@ -32,6 +34,9 @@ export async function startCodexRuntime(options: {
   };
   const version = await readCodexVersion(command);
   assertSupportedVersion(version, support);
+  if (!isVerifiedVersion(version, support)) {
+    await assertCodexProtocolCompatible(command);
+  }
   const transport = new ChildProcessTransport({
     ...options.transport,
     command,

@@ -1,8 +1,12 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { JsonlTransport } from "../protocol/jsonl-rpc-client.js";
 import { BoundedTail } from "./bounded-tail.js";
 import { sanitizeDiagnostic } from "../../core/application/safe-diagnostics.js";
+import {
+  forceKillWindowsProcessTree,
+  spawnWindowsAgent
+} from "../../platform-windows/process-control.js";
 
 export interface ChildTransportOptions {
   readonly command?: string;
@@ -25,7 +29,7 @@ export class ChildProcessTransport extends EventEmitter implements JsonlTranspor
     this.#maxLineBytes = options.maxLineBytes ?? 1024 * 1024;
     this.#stderrTail = new BoundedTail(options.stderrTailBytes ?? 64 * 1024);
     const environment = allowedEnvironment(options.environment ?? process.env);
-    this.#child = spawn(options.command ?? "codex", [...(options.args ?? ["app-server", "--listen", "stdio://"])], {
+    this.#child = spawnWindowsAgent(options.command ?? "codex", [...(options.args ?? ["app-server", "--listen", "stdio://"])], {
       cwd: options.cwd,
       env: { ...environment },
       shell: false,
@@ -72,10 +76,11 @@ export class ChildProcessTransport extends EventEmitter implements JsonlTranspor
 
   public async close(): Promise<void> {
     if (this.#closed) return;
-    this.#child.kill("SIGTERM");
+    this.#child.kill(process.platform === "win32" ? undefined : "SIGTERM");
     await new Promise<void>((resolve) => {
       const force = setTimeout(() => {
-        this.#child.kill("SIGKILL");
+        if (process.platform === "win32") void forceKillWindowsProcessTree(this.#child);
+        else this.#child.kill("SIGKILL");
         resolve();
       }, 2_000);
       force.unref();
@@ -90,7 +95,8 @@ export class ChildProcessTransport extends EventEmitter implements JsonlTranspor
     this.#stdoutBuffer = Buffer.concat([this.#stdoutBuffer, chunk]);
     if (this.#stdoutBuffer.length > this.#maxLineBytes && !this.#stdoutBuffer.includes(0x0a)) {
       this.finish(new Error("App-server stdout line exceeds limit"));
-      this.#child.kill("SIGKILL");
+      if (process.platform === "win32") void forceKillWindowsProcessTree(this.#child);
+      else this.#child.kill("SIGKILL");
       return;
     }
     let newline = this.#stdoutBuffer.indexOf(0x0a);
@@ -99,7 +105,8 @@ export class ChildProcessTransport extends EventEmitter implements JsonlTranspor
       this.#stdoutBuffer = this.#stdoutBuffer.subarray(newline + 1);
       if (lineBuffer.length > this.#maxLineBytes) {
         this.finish(new Error("App-server stdout line exceeds limit"));
-        this.#child.kill("SIGKILL");
+        if (process.platform === "win32") void forceKillWindowsProcessTree(this.#child);
+        else this.#child.kill("SIGKILL");
         return;
       }
       this.emit("line", lineBuffer.toString("utf8"));
@@ -115,7 +122,9 @@ export class ChildProcessTransport extends EventEmitter implements JsonlTranspor
 }
 
 export function allowedEnvironment(source: NodeJS.ProcessEnv): Record<string, string> {
-  const names = ["HOME", "PATH", "TMPDIR", "CODEX_HOME", "CODEX_SQLITE_HOME"];
+  const names = process.platform === "win32"
+    ? ["Path", "PATHEXT", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "LOCALAPPDATA", "CODEX_HOME", "CODEX_SQLITE_HOME"]
+    : ["HOME", "PATH", "TMPDIR", "CODEX_HOME", "CODEX_SQLITE_HOME"];
   return Object.fromEntries(names.flatMap((name) => {
     const value = source[name];
     return value === undefined ? [] : [[name, value]];

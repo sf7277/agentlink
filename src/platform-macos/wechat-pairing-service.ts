@@ -6,7 +6,7 @@ import {
   type GatewayConfig
 } from "../composition/config-schema.js";
 import type { QrLoginResult } from "../channel-wechat/adapter/qr-login.js";
-import { AtomicConfigStore } from "./atomic-config-store.js";
+import { AtomicConfigStore, type ConfigDocumentStore } from "./atomic-config-store.js";
 import { assertTrustedIlinkBaseUrl } from "../channel-wechat/protocol/url-policy.js";
 
 export interface WechatQrLogin {
@@ -22,7 +22,7 @@ export class WechatPairingService {
     private readonly configPath: string,
     private readonly login: WechatQrLogin,
     private readonly credentials: CredentialStore,
-    private readonly store = new AtomicConfigStore(configPath)
+    private readonly store: ConfigDocumentStore = new AtomicConfigStore(configPath)
   ) {}
 
   public async pair(input: {

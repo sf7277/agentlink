@@ -106,7 +106,7 @@ export class GatewayApplication {
   readonly #queue: TurnQueue;
   readonly #approvals: ApprovalBroker;
   readonly #runtimeFailure: RuntimeFailureService;
-  readonly #identity: IdentityService;
+  #identity: IdentityService;
   readonly #controllerBySession = new Map<string, string>();
   readonly #sessionSnapshots = new Map<string, SelectorSnapshot>();
   readonly #projectSnapshots = new Map<string, SelectorSnapshot>();
@@ -123,7 +123,7 @@ export class GatewayApplication {
     private readonly control: ControlRepository,
     private readonly projects: ProjectRepository,
     private readonly registry: ProjectRegistry,
-    private readonly channel: ChannelPort,
+    private channel: ChannelPort,
     private readonly agent: AgentPort,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
@@ -150,6 +150,23 @@ export class GatewayApplication {
     );
     this.#runtimeFailure = new RuntimeFailureService(store, clock, this.#linearizer);
     this.#identity = new IdentityService(options.identities);
+  }
+
+  /**
+   * Swap the outbound channel and controller identities after startup.
+   * Used by the Windows foreground Gateway to attach a freshly paired WeChat
+   * channel without restarting, mirroring the macOS service-restart flow.
+   */
+  public attachChannel(
+    channel: ChannelPort,
+    identities: readonly {
+      accountId: string;
+      senderId: string;
+      gatewayUserId: string;
+    }[]
+  ): void {
+    this.channel = channel;
+    this.#identity = new IdentityService(identities);
   }
 
   public async handleChannelMessage(message: ChannelMessage): Promise<void> {

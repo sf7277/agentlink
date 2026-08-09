@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { watch, type FSWatcher } from "node:fs";
 import { chmod, lstat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -29,21 +30,29 @@ import { RoutingAgentPort } from "./composition/routing-agent-port.js";
 import { RandomIdGenerator, SystemClock } from "./composition/system-services.js";
 import type { AgentPort } from "./core/contracts/ports.js";
 import type { AgentSession } from "./core/domain/model.js";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ProjectRegistry } from "./core/application/project-registry.js";
 import { safeDiagnosticRecord } from "./core/application/safe-diagnostics.js";
 import { Sha256DigestService } from "./core/application/sha256-digest-service.js";
 import { UnixControlServer } from "./local-control/server/unix-control-server.js";
-import {
-  ensureMacosApplicationPaths,
-  macosApplicationPaths
-} from "./platform-macos/application-paths.js";
+import { WindowsControlServer } from "./local-control/server/windows-control-server.js";
 import { ManagedLogSink } from "./platform-macos/managed-log-sink.js";
 import {
   AtomicConfigStore,
   ReloadableConfig
 } from "./platform-macos/atomic-config-store.js";
-import { KeychainCredentialStore } from "./platform-macos/keychain-credential-store.js";
+import {
+  WindowsAtomicConfigStore
+} from "./platform-windows/atomic-config-store.js";
+import { writeWindowsForegroundReadyNotice } from "./platform-windows/foreground-ready-notice.js";
+import { shouldReloadWechatChannel } from "./platform-windows/wechat-channel-reload.js";
+import {
+  applicationPaths,
+  cleanupPendingCredentialReferences,
+  credentialStore,
+  ensureApplicationPaths
+} from "./platform/factory.js";
+import type { ConfigDocumentStore } from "./platform-macos/atomic-config-store.js";
 import { ControlRepository } from "./storage-sqlite/control-repository.js";
 import { ProjectRepository } from "./storage-sqlite/project-repository.js";
 import { SqliteStateStore } from "./storage-sqlite/sqlite-state-store.js";
@@ -60,6 +69,7 @@ function credentialStatusFor(status: IlinkChannelStatus): CredentialStatus {
 }
 
 function notifyAuthenticationRequired(): void {
+  if (process.platform !== "darwin") return;
   const child = spawn("/usr/bin/osascript", [
     "-e",
     'display notification "微信连接已失效，请运行 agentlink pair wechat 重新配对" with title "AgentLink"'
@@ -87,18 +97,28 @@ const { values } = parseArgs({
 if (Number(process.versions.node.split(".")[0]) < 22) {
   throw new Error("AgentLink Gateway requires Node 22 or later");
 }
-if (process.platform !== "darwin") throw new Error("The MVP Gateway requires macOS");
+if (process.platform !== "darwin" && process.platform !== "win32") {
+  throw new Error(`AgentLink Gateway supports macOS and Windows only; found ${process.platform}`);
+}
 
-const paths = macosApplicationPaths();
-await ensureMacosApplicationPaths(paths);
+const paths = applicationPaths();
+await ensureApplicationPaths(paths);
 if (values.config !== undefined && values.config !== paths.config) {
   throw new Error("Gateway config path must be the managed Application Support path");
 }
-const configSource = new ReloadableConfig(new AtomicConfigStore(paths.config));
+const configStore: ConfigDocumentStore = process.platform === "win32"
+  ? new WindowsAtomicConfigStore(paths.config)
+  : new AtomicConfigStore(paths.config);
+const configMetadata = await lstat(paths.config).catch((error: NodeJS.ErrnoException) => {
+  if (error.code === "ENOENT") return undefined;
+  throw error;
+});
+if (configMetadata === undefined) await configStore.save({});
+const configSource = new ReloadableConfig(configStore);
 const config = await configSource.initialize();
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url));
 const store = new SqliteStateStore(paths.database, migrations);
-await chmod(paths.database, 0o600);
+if (process.platform === "darwin") await chmod(paths.database, 0o600);
 store.reconcileStartup(new Date().toISOString());
 const clock = new SystemClock();
 const ids = new RandomIdGenerator();
@@ -132,11 +152,17 @@ if (values["health-check"]) {
   process.on("uncaughtExceptionMonitor", (error) => {
     log("stderr", { event: "gateway_uncaught_exception", status: "error", message: error.message });
   });
-  const server = new UnixControlServer(paths.socket, {
+  const server = process.platform === "win32"
+    ? new WindowsControlServer(paths.socket, {
+        maxLineBytes: config.maxInputBytes,
+        maxPublishedBytes: config.maxOutputBytes,
+        maxRequestsPerMinute: config.requestsPerMinute
+      })
+    : new UnixControlServer(paths.socket, {
     maxLineBytes: config.maxInputBytes,
     maxPublishedBytes: config.maxOutputBytes,
     maxRequestsPerMinute: config.requestsPerMinute
-  });
+      });
   let runtime: CodexRuntime | undefined;
   let grokRuntime: GrokRuntime | undefined;
   // Claude sessions each own a subprocess; shutdown must terminate them all.
@@ -147,6 +173,8 @@ if (values["health-check"]) {
   let channelStatus: CredentialStatus = config.wechat === undefined ? "DISABLED" : "UNKNOWN";
   let authenticationNotificationSent = false;
   let stopping = false;
+  let configWatcher: FSWatcher | undefined;
+  let channelReloadInProgress = false;
   const diagnostic = (kind: string, error: Error): void => {
     log("stderr", {
       event: kind,
@@ -163,10 +191,10 @@ if (values["health-check"]) {
         config.wechat.controllers,
         clock.now()
       );
-      const credentialStore = new KeychainCredentialStore();
-      await credentialStore.cleanupPendingReferences();
-      token = await credentialStore.get(config.wechat.credentialReference);
-      if (token === undefined) throw new Error("Configured iLink credential is missing from Keychain");
+      const credentials = credentialStore();
+      await cleanupPendingCredentialReferences();
+      token = await credentials.get(config.wechat.credentialReference);
+      if (token === undefined) throw new Error("Configured iLink credential is missing from the platform credential store");
     }
     const projectPath = (projectId: string): string => {
       const project = projectRepository.findById(projectId);
@@ -569,6 +597,118 @@ if (values["health-check"]) {
     await channel.start((message) => application!.handleChannelMessage(message));
   }
   log("stdout", { event: "gateway_started", status: "ready" });
+  if (process.platform === "win32") writeWindowsForegroundReadyNotice();
+
+  const attachConfiguredWechatChannel = async (): Promise<void> => {
+    if (!shouldReloadWechatChannel({
+      stopping,
+      applicationReady: application !== undefined,
+      channelPresent: channel !== undefined,
+      channelStatus,
+      reloadInProgress: channelReloadInProgress
+    })) return;
+    channelReloadInProgress = true;
+    try {
+      const reloaded = await configSource.reload();
+      if (!reloaded.ok) {
+        diagnostic("config_reload_failed", reloaded.error);
+        return;
+      }
+      const wechat = reloaded.config.wechat;
+      if (wechat === undefined) return;
+      const credentials = credentialStore();
+      const token = await credentials.get(wechat.credentialReference);
+      if (token === undefined) {
+        channelStatus = "AUTHENTICATION_REQUIRED";
+        control.setCredentialStatus(wechat.accountId, "AUTHENTICATION_REQUIRED", clock.now());
+        log("stderr", {
+          event: "wechat_credential_missing",
+          status: "error",
+          message: "配对凭证不在本机安全存储中，请重新执行 agentlink pair wechat"
+        });
+        return;
+      }
+      control.putChannelAccount(
+        wechat.accountId,
+        wechat.credentialReference,
+        wechat.controllers,
+        clock.now()
+      );
+      const client = new IlinkHttpClient({
+        baseUrl: assertTrustedIlinkBaseUrl(wechat.baseUrl),
+        token: async () => token,
+        maxRequestBytes: reloaded.config.maxInputBytes,
+        maxResponseBytes: reloaded.config.maxOutputBytes
+      });
+      const initialCursor = control.cursorFor(wechat.accountId);
+      const nextChannel = new IlinkChannelAdapter(client, ids, {
+        accountId: wechat.accountId,
+        allowedSenders: new Set(wechat.controllers.map((item) => item.senderId)),
+        ...(initialCursor === undefined ? {} : { initialCursor }),
+        onCursorAccepted: (cursor) =>
+          control.saveCursor(wechat.accountId, cursor, clock.now()),
+        onStatus: (status) => {
+          channelStatus = credentialStatusFor(status);
+          if (status === "authentication_required") {
+            control.setCredentialStatus(wechat.accountId, "AUTHENTICATION_REQUIRED", clock.now());
+            if (!authenticationNotificationSent) {
+              authenticationNotificationSent = true;
+              notifyAuthenticationRequired();
+            }
+          }
+        },
+        onFatal: (error) => diagnostic("wechat_channel_fatal", error)
+      });
+      const previousChannel = channel;
+      await previousChannel?.stop();
+      channel = nextChannel;
+      application!.attachChannel(
+        nextChannel,
+        wechat.controllers.map((item) => ({
+          accountId: wechat.accountId,
+          senderId: item.senderId,
+          gatewayUserId: item.gatewayUserId
+        }))
+      );
+      channelStatus = "UNKNOWN";
+      authenticationNotificationSent = false;
+      try {
+        await nextChannel.start((message) => application!.handleChannelMessage(message));
+      } catch (error) {
+        await nextChannel.stop().catch(() => undefined);
+        channel = undefined;
+        channelStatus = "UNKNOWN";
+        throw error;
+      }
+      log("stdout", {
+        event: previousChannel === undefined ? "wechat_channel_attached" : "wechat_channel_replaced",
+        status: "ready"
+      });
+    } finally {
+      channelReloadInProgress = false;
+    }
+  };
+
+  if (process.platform === "win32") {
+    // Pairing writes config.json from a separate CLI process; watch the file
+    // so a foreground Gateway attaches the new WeChat channel without a
+    // restart (macOS uses the LaunchAgent restart path instead).
+    let debounce: NodeJS.Timeout | undefined;
+    configWatcher = watch(dirname(paths.config), { encoding: "utf8" }, (_eventType, filename) => {
+      if (filename !== "config.json") return;
+      if (debounce !== undefined) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = undefined;
+        void attachConfiguredWechatChannel().catch((error) => {
+          diagnostic(
+            "wechat_channel_attach_failed",
+            error instanceof Error ? error : new Error(String(error))
+          );
+        });
+      }, 300);
+    });
+    configWatcher.on("error", (error) => diagnostic("config_watch_failed", error));
+  }
 
   const stop = async (signal: string) => {
     if (stopping) return;
@@ -580,6 +720,7 @@ if (values["health-check"]) {
     });
     const errors: Error[] = [];
     for (const operation of [
+      () => configWatcher?.close(),
       () => channel?.stop(),
       () => server.stop(),
       () => runtime?.close(),
@@ -605,20 +746,24 @@ if (values["health-check"]) {
         void stop(signal).then(resolve, reject);
       });
     }
-    process.on("SIGHUP", () => {
-      if (stopping) return;
-      void configSource.reload().then((result) => {
-        log("stdout", {
-          event: "config_reload",
-          status: result.ok ? "accepted" : "rejected"
+    if (process.platform === "darwin") {
+      process.on("SIGHUP", () => {
+        if (stopping) return;
+        void configSource.reload().then((result) => {
+          log("stdout", {
+            event: "config_reload",
+            status: result.ok ? "accepted" : "rejected"
+          });
         });
       });
-    });
+    }
   });
   await finished;
-  const socket = await lstat(paths.socket).catch((error: NodeJS.ErrnoException) =>
-    error.code === "ENOENT" ? undefined : Promise.reject(error)
-  );
-  if (socket !== undefined) throw new Error("Gateway socket remained after shutdown");
+  if (process.platform === "darwin") {
+    const socket = await lstat(paths.socket).catch((error: NodeJS.ErrnoException) =>
+      error.code === "ENOENT" ? undefined : Promise.reject(error)
+    );
+    if (socket !== undefined) throw new Error("Gateway socket remained after shutdown");
+  }
   logs.close();
 }

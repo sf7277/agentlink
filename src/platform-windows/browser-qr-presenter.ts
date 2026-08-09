@@ -1,35 +1,34 @@
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 
-export type PairingPageStatus = "waiting" | "paired" | "expired" | "cancelled" | "failed";
+export type WindowsPairingPageStatus = "waiting" | "paired" | "expired" | "cancelled" | "failed";
 
-export interface BrowserQrPresenterOptions {
+export interface WindowsBrowserQrPresenterOptions {
   readonly render: (content: string, outputPath: string) => Promise<void>;
   readonly open?: (url: string) => Promise<void>;
   readonly onOpenFailure?: (url: string, error: Error) => void;
   readonly retainTerminalStatusMs?: number;
 }
 
-export class BrowserQrPresenter {
+export class WindowsBrowserQrPresenter {
   #server: Server | undefined;
   #directory: string | undefined;
   #pathToken: string | undefined;
   #qrPath: string | undefined;
-  #status: PairingPageStatus = "waiting";
+  #status: WindowsPairingPageStatus = "waiting";
 
-  public constructor(private readonly options: BrowserQrPresenterOptions) {}
+  public constructor(private readonly options: WindowsBrowserQrPresenterOptions) {}
 
   public async show(content: string): Promise<string> {
     if (this.#server !== undefined) throw new Error("Pairing browser page is already active");
     this.#directory = await mkdtemp(join(tmpdir(), "agentlink-pair-"));
     await chmod(this.#directory, 0o700);
-    this.#qrPath = join(this.#directory, "wechat-login.png");
+    this.#qrPath = join(this.#directory, "wechat-login.svg");
     await this.options.render(content, this.#qrPath);
-    await chmod(this.#qrPath, 0o600);
     this.#pathToken = randomBytes(24).toString("hex");
     this.#server = createServer((request, response) => {
       void this.respond(request.url ?? "", response);
@@ -45,6 +44,7 @@ export class BrowserQrPresenter {
     }
     const address = this.#server.address();
     if (address === null || typeof address === "string") {
+      await this.close();
       throw new Error("Pairing browser page did not receive a TCP port");
     }
     const url = `http://127.0.0.1:${address.port}/pair/${this.#pathToken}`;
@@ -59,7 +59,7 @@ export class BrowserQrPresenter {
     return url;
   }
 
-  public async finish(status: Exclude<PairingPageStatus, "waiting">): Promise<void> {
+  public async finish(status: Exclude<WindowsPairingPageStatus, "waiting">): Promise<void> {
     this.#status = status;
     const delay = this.options.retainTerminalStatusMs ?? 750;
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
@@ -117,9 +117,9 @@ export class BrowserQrPresenter {
         response.end(pageCss);
         return;
       }
-      if (url === `${base}/qr.png` && this.#qrPath !== undefined) {
-        response.writeHead(200, { ...headers, "Content-Type": "image/png" });
-        response.end(await readFile(this.#qrPath));
+      if (url === `${base}/qr.svg` && this.#qrPath !== undefined) {
+        response.writeHead(200, { ...headers, "Content-Type": "image/svg+xml; charset=utf-8" });
+        response.end(await readFile(this.#qrPath, "utf8"));
         return;
       }
       response.writeHead(404, headers);
@@ -132,17 +132,17 @@ export class BrowserQrPresenter {
 }
 
 function pageHtml(base: string): string {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentLink 微信配对</title><link rel="stylesheet" href="${base}/style.css"></head><body><main class="card"><h1>AgentLink 微信配对</h1><img src="${base}/qr.png" alt="微信登录二维码"><p id="status">请使用微信扫码确认</p><p class="hint">如显示不全，请按 Cmd+0 重置浏览器缩放或放大窗口</p></main><script src="${base}/client.js"></script></body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentLink 微信配对</title><link rel="stylesheet" href="${base}/style.css"></head><body><main class="card"><h1>AgentLink 微信配对</h1><img src="${base}/qr.svg" alt="微信登录二维码"><p id="status">请使用微信扫码确认</p><p class="hint">如显示不全，请按 Ctrl+0 重置浏览器缩放或放大窗口</p></main><script src="${base}/client.js"></script></body></html>`;
 }
 
 const pageCss = [
   "html{height:100%}",
-  "body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;background:#f5f5f7;color:#1d1d1f;display:flex;min-height:100%;overflow:auto}",
-  ".card{background:#fff;border-radius:20px;padding:clamp(16px,4vw,32px);margin:auto;text-align:center;box-shadow:0 12px 36px #0002;width:min(94vw,440px);box-sizing:border-box}",
+  "body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;background:#f3f4f6;color:#111827;display:flex;min-height:100%;overflow:auto}",
+  ".card{background:#fff;border-radius:16px;padding:clamp(16px,4vw,32px);margin:auto;text-align:center;box-shadow:0 12px 36px #0002;width:min(94vw,440px);box-sizing:border-box}",
   "h1{font-size:clamp(18px,4vw,24px);margin:0 0 12px}",
   "img{width:min(72vw,300px);height:auto;max-width:100%;max-height:72vh;display:block;margin:0 auto;aspect-ratio:1/1}",
-  "p{color:#666;margin:12px 0 0}",
-  ".hint{font-size:12px;color:#999;margin-top:8px}"
+  "p{color:#4b5563;margin:12px 0 0}",
+  ".hint{font-size:12px;color:#9ca3af;margin-top:8px}"
 ].join("");
 
 function clientScript(base: string): string {
@@ -151,10 +151,10 @@ function clientScript(base: string): string {
 
 function openDefaultBrowser(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("/usr/bin/open", [url], {
+    const child = spawn("explorer.exe", [url], {
       shell: false,
       stdio: ["ignore", "ignore", "pipe"],
-      env: { PATH: "/usr/bin:/bin" }
+      windowsHide: true
     });
     let diagnostic = "";
     child.stderr.on("data", (chunk) => {

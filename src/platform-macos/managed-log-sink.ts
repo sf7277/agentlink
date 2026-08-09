@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { sanitizeDiagnostic } from "../core/application/safe-diagnostics.js";
 import { assertPrivateOwnedDirectory } from "./application-paths.js";
+import { assertWindowsPrivatePath } from "../platform-windows/security.js";
 
 export const MANAGED_LOG_MAX_BYTES = 1024 * 1024;
 export const MANAGED_LOG_HISTORY = 3;
@@ -33,7 +34,8 @@ export class ManagedLogSink {
   }
 
   public static async create(logDirectory: string): Promise<ManagedLogSink> {
-    await assertPrivateOwnedDirectory(logDirectory);
+    if (process.platform === "win32") await assertWindowsDirectory(logDirectory);
+    else await assertPrivateOwnedDirectory(logDirectory);
     return new ManagedLogSink(logDirectory);
   }
 
@@ -116,8 +118,8 @@ function assertManagedFilesSafe(path: string): void {
     if (
       !metadata.isFile() ||
       metadata.isSymbolicLink() ||
-      (uid !== undefined && metadata.uid !== uid) ||
-      (metadata.mode & 0o077) !== 0
+      (process.platform !== "win32" && uid !== undefined && metadata.uid !== uid) ||
+      (process.platform !== "win32" && (metadata.mode & 0o077) !== 0)
     ) {
       throw new Error(`AgentLink log path is not a trusted private regular file: ${candidate}`);
     }
@@ -127,16 +129,22 @@ function assertManagedFilesSafe(path: string): void {
 function openManagedFile(path: string): number {
   const descriptor = openSync(
     path,
-    constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW,
+    constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT |
+      (process.platform === "win32" ? 0 : constants.O_NOFOLLOW),
     0o600
   );
   const metadata = fstatSync(descriptor);
   const uid = process.getuid?.();
-  if (!metadata.isFile() || (uid !== undefined && metadata.uid !== uid)) {
+  if (!metadata.isFile() ||
+    (process.platform !== "win32" && uid !== undefined && metadata.uid !== uid)) {
     closeSync(descriptor);
     throw new Error("AgentLink log descriptor is not a trusted owned regular file");
   }
   return descriptor;
+}
+
+async function assertWindowsDirectory(path: string): Promise<void> {
+  await assertWindowsPrivatePath(path, "directory");
 }
 
 function rotate(path: string): void {

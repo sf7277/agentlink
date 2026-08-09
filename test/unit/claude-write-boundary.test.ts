@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { lstat, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -14,7 +15,7 @@ import { DomainError } from "../../src/core/domain/errors.js";
 const SESSION_ID = "019f8fa2-273d-7200-a92e-0a85c7e3e9bc";
 
 async function claudeHomeWithSession(projectRoot: string, sessionId: string): Promise<string> {
-  const home = await mkdtemp("/tmp/agentlink-claude-home-");
+  const home = await mkdtemp(join(tmpdir(), "agentlink-claude-home-"));
   const directory = join(home, "projects", encodedClaudeProjectDirectory(projectRoot));
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, `${sessionId}.jsonl`), "{}\n", { mode: 0o600 });
@@ -87,7 +88,7 @@ test("write boundary refuses a symlinked project directory", async () => {
   // a symlinked projects/<encoded> directory. Checking only the final path
   // component would let this redirect reads and deletes outside the boundary.
   const realHome = await claudeHomeWithSession(projectRoot, SESSION_ID);
-  const attackerHome = await mkdtemp("/tmp/agentlink-claude-attacker-");
+  const attackerHome = await mkdtemp(join(tmpdir(), "agentlink-claude-attacker-"));
   await mkdir(join(attackerHome, "projects"), { recursive: true });
   await symlink(
     join(realHome, "projects", encodedClaudeProjectDirectory(projectRoot)),

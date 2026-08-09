@@ -24,6 +24,10 @@ AgentLink 不是腾讯、微信、OpenAI 或 xAI 发布、认证或支持的产�
 
 环境要求：macOS（Apple Silicon 或 Intel）、Node.js 22 或更高版本，以及已安装并登录的目标 Agent CLI。
 
+Codex CLI最低支持版本为`0.144.4`。AgentLink对已验证版本直接启动；对更高的未验证版本会先
+调用Codex自带的schema生成命令检查所需App Server稳定接口，兼容时允许启动，不要求固定在
+`0.144.x`。检查不会创建或修改Codex Session，且不会自动启用实验API。
+
 ```bash
 npm install -g @sf7277/agentlink
 agentlink doctor

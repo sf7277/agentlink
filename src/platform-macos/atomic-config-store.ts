@@ -16,7 +16,13 @@ import {
 } from "../composition/config-schema.js";
 import { assertPrivateOwnedDirectory } from "./application-paths.js";
 
-export class AtomicConfigStore {
+export interface ConfigDocumentStore {
+  load(): Promise<GatewayConfig>;
+  loadDocument(): Promise<unknown>;
+  save(config: GatewayConfigInput): Promise<void>;
+}
+
+export class AtomicConfigStore implements ConfigDocumentStore {
   public constructor(
     private readonly path: string,
     private readonly maxBytes = 1024 * 1024
@@ -88,7 +94,7 @@ export class AtomicConfigStore {
 export class ReloadableConfig {
   #current: GatewayConfig | undefined;
 
-  public constructor(private readonly store: AtomicConfigStore) {}
+  public constructor(private readonly store: ConfigDocumentStore) {}
 
   public current(): GatewayConfig | undefined {
     return this.#current;
