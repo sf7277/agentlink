@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -8,20 +7,13 @@ import {
   MANAGED_LOG_RECORD_MAX_BYTES,
   ManagedLogSink
 } from "../../src/platform-macos/managed-log-sink.js";
-
-async function privateTestRoot(prefix: string): Promise<string> {
-  const base = process.platform === "win32"
-    ? process.env["LOCALAPPDATA"]
-    : tmpdir();
-  if (base === undefined) throw new Error("A test application-data directory is required");
-  return realpath(await mkdtemp(join(base, prefix)));
-}
+import { createPrivateTestRoot } from "../fakes/windows-private-test-path.js";
 
 async function prepareLogDirectory(prefix: string): Promise<{
   readonly root: string;
   readonly logs: string;
 }> {
-  const root = await privateTestRoot(prefix);
+  const root = await createPrivateTestRoot(prefix);
   const logs = join(root, "logs");
   await mkdir(logs, { recursive: true });
   if (process.platform !== "win32") await chmod(logs, 0o700);

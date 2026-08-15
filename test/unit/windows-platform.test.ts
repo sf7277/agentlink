@@ -9,6 +9,7 @@ import { WindowsCredentialStore } from "../../src/platform-windows/credential-st
 import { WindowsAtomicConfigStore } from "../../src/platform-windows/atomic-config-store.js";
 import { WindowsControlServer } from "../../src/local-control/server/windows-control-server.js";
 import { sendControlEvent } from "../../src/local-control/client/control-client.js";
+import { createPrivateTestRoot } from "../fakes/windows-private-test-path.js";
 
 test("Windows application paths stay under LOCALAPPDATA", () => {
   const paths = windowsApplicationPaths("C:\\Users\\alice\\AppData\\Local");
@@ -47,11 +48,7 @@ test("Windows credential store has no non-Windows fallback and round-trips on Wi
 });
 
 test("Windows config store round-trips without Unix mode or UID checks", async () => {
-  const base = process.platform === "win32"
-    ? process.env["LOCALAPPDATA"]
-    : tmpdir();
-  if (base === undefined) throw new Error("A test application-data directory is required");
-  const directory = await mkdtemp(join(base, "agentlink-windows-config-test-"));
+  const directory = await createPrivateTestRoot("agentlink-windows-config-test-");
   const output = join(directory, "config.json");
   try {
     const store = new WindowsAtomicConfigStore(output);
