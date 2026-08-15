@@ -33,6 +33,8 @@
     "release:sign-dmg": "node scripts/sign-notarize-release.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
+    "test:windows": "node --test dist/test/fault/child-process-transport.test.js dist/test/unit/managed-log-sink.test.js dist/test/unit/windows-command-capture.test.js dist/test/unit/windows-foreground-ready-notice.test.js dist/test/unit/windows-platform.test.js dist/test/unit/windows-wechat-channel-reload.test.js",
+    "check:windows": "npm run typecheck && npm run build && npm run check:boundaries && npm run check:secrets && npm run test:windows",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.json && node scripts/copy-assets.mjs && node scripts/check-boundaries.mjs && node scripts/check-secrets.mjs && node scripts/run-tests.mjs"
   },
   "files": [

@@ -47,7 +47,11 @@ test("Windows credential store has no non-Windows fallback and round-trips on Wi
 });
 
 test("Windows config store round-trips without Unix mode or UID checks", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "agentlink-windows-config-test-"));
+  const base = process.platform === "win32"
+    ? process.env["LOCALAPPDATA"]
+    : tmpdir();
+  if (base === undefined) throw new Error("A test application-data directory is required");
+  const directory = await mkdtemp(join(base, "agentlink-windows-config-test-"));
   const output = join(directory, "config.json");
   try {
     const store = new WindowsAtomicConfigStore(output);

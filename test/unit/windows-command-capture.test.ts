@@ -9,8 +9,9 @@ import {
 } from "../../src/platform-windows/process-control.js";
 import { readCodexVersion } from "../../src/agent-codex/protocol/version-gate.js";
 
-test("Windows .cmd agent version probe is captured through the controlled launcher", async (t) => {
-  if (process.platform !== "win32") t.skip("Windows-only");
+test("Windows .cmd agent version probe is captured through the controlled launcher", {
+  skip: process.platform !== "win32"
+}, async () => {
   const directory = await mkdtemp(join(tmpdir(), "agentlink-cmd-probe-"));
   const cmd = join(directory, "fixture-agent.cmd");
   try {
@@ -24,8 +25,9 @@ test("Windows .cmd agent version probe is captured through the controlled launch
   }
 });
 
-test("Codex version gate accepts a .cmd command on Windows", async (t) => {
-  if (process.platform !== "win32") t.skip("Windows-only");
+test("Codex version gate accepts a .cmd command on Windows", {
+  skip: process.platform !== "win32"
+}, async () => {
   const directory = await mkdtemp(join(tmpdir(), "agentlink-codex-cmd-"));
   const cmd = join(directory, "codex-fixture.cmd");
   try {
@@ -37,8 +39,9 @@ test("Codex version gate accepts a .cmd command on Windows", async (t) => {
   }
 });
 
-test("Windows .cmd agent arguments reject shell metacharacters", async (t) => {
-  if (process.platform !== "win32") t.skip("Windows-only");
+test("Windows .cmd agent arguments reject shell metacharacters", {
+  skip: process.platform !== "win32"
+}, async () => {
   const directory = await mkdtemp(join(tmpdir(), "agentlink-cmd-args-"));
   const cmd = join(directory, "fixture-agent.cmd");
   try {
