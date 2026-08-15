@@ -62,14 +62,14 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     "$ErrorActionPreference='Stop'",
     "$p=$env:AGENTLINK_SECURITY_PATH",
     "$current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+    "$currentName=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
     "$acl=Get-Acl -LiteralPath $p -ErrorAction Stop",
     "$entries=@($acl.Access | ForEach-Object {",
     "  $identity=$_.IdentityReference",
     "  $sid=[string]$identity.Value",
-    "  try { $sid=$identity.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid=[string]$identity }",
-    "  [pscustomobject]@{sid=$sid;type=[string]$_.AccessControlType;rights=[string]$_.FileSystemRights}",
+    "  [pscustomobject]@{sid=$sid;identity=[string]$identity;type=[string]$_.AccessControlType;rights=[string]$_.FileSystemRights}",
     "})",
-    "[pscustomobject]@{currentSid=$current;entries=$entries} | ConvertTo-Json -Compress"
+    "[pscustomobject]@{currentSid=$current;currentName=$currentName;entries=$entries} | ConvertTo-Json -Compress"
   ].join("\n");
   const result = await execFileAsync(powershell, [
     "-NoProfile",
@@ -90,11 +90,14 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
   });
   const parsed = JSON.parse(result.stdout) as {
     readonly currentSid?: string;
+    readonly currentName?: string;
     readonly entries?: {
       readonly sid?: string;
+      readonly identity?: string;
       readonly type?: string;
     } | ReadonlyArray<{
       readonly sid?: string;
+      readonly identity?: string;
       readonly type?: string;
     }>;
   };
@@ -103,8 +106,11 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     : Array.isArray(parsed.entries)
       ? parsed.entries
       : [parsed.entries];
+  const currentName = parsed.currentName?.toLowerCase();
   if (parsed.currentSid === undefined ||
-      !entries.some((entry) => entry.sid === parsed.currentSid && entry.type === "Allow")) {
+      !entries.some((entry) => entry.type === "Allow" &&
+        (entry.sid === parsed.currentSid ||
+          (currentName !== undefined && entry.identity?.toLowerCase() === currentName)))) {
     throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
   }
   if (entries.some((entry) => entry.type === "Allow" && entry.sid !== undefined &&
