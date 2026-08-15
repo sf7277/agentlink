@@ -53,6 +53,7 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
   if (process.platform !== "win32") return;
   const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
   const script = [
+    "$ErrorActionPreference='Stop'",
     "$p=$env:AGENTLINK_SECURITY_PATH",
     "$current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
     "$acl=Get-Acl -LiteralPath $p -ErrorAction Stop",
@@ -61,7 +62,7 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     "  [pscustomobject]@{sid=$sid;type=[string]$_.AccessControlType;rights=[string]$_.FileSystemRights}",
     "})",
     "[pscustomobject]@{currentSid=$current;entries=$entries} | ConvertTo-Json -Compress"
-  ].join(";");
+  ].join("\n");
   const result = await execFileAsync(powershell, [
     "-NoProfile",
     "-NonInteractive",
