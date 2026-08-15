@@ -79,7 +79,7 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     "-Command",
     script
   ], {
-    timeout: 5_000,
+    timeout: 30_000,
     windowsHide: true,
     maxBuffer: 64 * 1024,
     env: {
