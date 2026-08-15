@@ -1,14 +1,19 @@
 import { execFile } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { promisify } from "node:util";
-import { dirname, win32 } from "node:path";
+import { dirname, join, win32 } from "node:path";
+import { tmpdir } from "node:os";
 
 const execFileAsync = promisify(execFile);
 const BROAD_SIDS = new Set([
   "S-1-1-0",    // Everyone
   "S-1-5-11",   // Authenticated Users
   "S-1-5-32-545", // BUILTIN\\Users
-  "S-1-5-32-546"  // BUILTIN\\Guests
+  "S-1-5-32-546",  // BUILTIN\\Guests
+  "WD",          // Everyone (SDDL alias)
+  "AU",          // Authenticated Users (SDDL alias)
+  "BU",          // BUILTIN\\Users (SDDL alias)
+  "BG"           // BUILTIN\\Guests (SDDL alias)
 ]);
 
 export async function assertWindowsPrivatePath(
@@ -51,46 +56,57 @@ async function assertNoReparsePointAncestors(path: string): Promise<void> {
 
 export async function assertWindowsPrivateAcl(path: string): Promise<void> {
   if (process.platform !== "win32") return;
-  const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-  const script = [
-    "$ErrorActionPreference='Stop'",
-    "$p=$env:AGENTLINK_SECURITY_PATH",
-    "$current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
-    "$acl=Get-Acl -LiteralPath $p -ErrorAction Stop",
-    "$sddl=$acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)",
-    "[pscustomobject]@{currentSid=$current;sddl=$sddl} | ConvertTo-Json -Compress"
-  ].join("\n");
-  const result = await execFileAsync(powershell, [
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    script
-  ], {
-    timeout: 30_000,
-    windowsHide: true,
-    maxBuffer: 64 * 1024,
-    env: {
-      SystemRoot: process.env["SystemRoot"] ?? "C:\\Windows",
-      Path: process.env["Path"] ?? process.env["PATH"] ?? "",
-      AGENTLINK_SECURITY_PATH: path
-    }
-  });
-  const parsed = JSON.parse(result.stdout) as {
-    readonly currentSid?: string;
-    readonly sddl?: string;
-  };
+  const descriptor = await readWindowsSecurityDescriptor(path);
   const allowSids: string[] = [];
-  for (const match of parsed.sddl?.matchAll(/\(([^)]+)\)/gu) ?? []) {
+  for (const match of descriptor.sddl.matchAll(/\(([^)]+)\)/gu)) {
     const fields = match[1]!.split(";");
     if (fields[0] === "A") allowSids.push(fields.at(-1)!);
   }
-  if (parsed.currentSid === undefined ||
-      !allowSids.includes(parsed.currentSid)) {
+  if (!allowSids.includes(descriptor.currentSid)) {
     throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
   }
   if (allowSids.some((sid) => BROAD_SIDS.has(sid))) {
     throw new Error(`AgentLink Windows ACL grants broad user access: ${path}`);
+  }
+}
+
+async function readWindowsSecurityDescriptor(path: string): Promise<{
+  readonly currentSid: string;
+  readonly sddl: string;
+}> {
+  const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
+  const environment = {
+    SystemRoot: systemRoot,
+    Path: process.env["Path"] ?? process.env["PATH"] ?? ""
+  };
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "agentlink-acl-"));
+  const savedAcl = join(temporaryRoot, "acl.txt");
+  try {
+    const icacls = `${systemRoot}\\System32\\icacls.exe`;
+    await execFileAsync(icacls, [path, "/save", savedAcl, "/c"], {
+      timeout: 5_000,
+      windowsHide: true,
+      maxBuffer: 64 * 1024,
+      env: environment
+    });
+    const current = await execFileAsync(`${systemRoot}\\System32\\whoami.exe`, [
+      "/user", "/fo", "csv", "/nh"
+    ], {
+      timeout: 5_000,
+      windowsHide: true,
+      maxBuffer: 16 * 1024,
+      env: environment
+    });
+    const currentSid = current.stdout.match(/S-1-[0-9-]+/u)?.[0];
+    if (currentSid === undefined) throw new Error("Could not determine the current Windows SID");
+    const bytes = await readFile(savedAcl);
+    const text = bytes[0] === 0xff && bytes[1] === 0xfe
+      ? new TextDecoder("utf-16le").decode(bytes.subarray(2))
+      : bytes.toString("utf8");
+    const sddl = text.match(/^D:[^\r\n]+$/mu)?.[0];
+    if (sddl === undefined) throw new Error("Could not read the Windows security descriptor");
+    return { currentSid, sddl };
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
