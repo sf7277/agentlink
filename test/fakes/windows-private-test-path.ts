@@ -24,13 +24,13 @@ export async function createPrivateTestRoot(prefix: string): Promise<string> {
     const whoami = await execFileAsync(`${systemRoot}\\System32\\whoami.exe`, [
       "/user", "/fo", "csv", "/nh"
     ], { windowsHide: true, maxBuffer: 16 * 1024, env: environment });
-    const currentSid = whoami.stdout.match(/S-1-[0-9-]+/u)?.[0];
-    if (currentSid === undefined) throw new Error("Could not determine the current Windows SID");
+    const currentIdentity = whoami.stdout.match(/"([^"]+)","S-1-[0-9-]+"/u)?.[1];
+    if (currentIdentity === undefined) throw new Error("Could not determine the current Windows identity");
     await execFileAsync(`${systemRoot}\\System32\\icacls.exe`, [
       root,
       "/inheritance:r",
       "/grant:r",
-      `*${currentSid}:(OI)(CI)F`,
+      `${currentIdentity}:(OI)(CI)F`,
       "SYSTEM:(OI)(CI)F"
     ], { windowsHide: true, maxBuffer: 64 * 1024, env: environment });
     return root;
