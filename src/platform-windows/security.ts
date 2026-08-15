@@ -63,7 +63,7 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     if (fields[0] === "A") allowSids.push(fields.at(-1)!);
   }
   if (!allowSids.includes(descriptor.currentSid)) {
-    throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
+    throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path} (current=${descriptor.currentSid}; allow=${allowSids.join(",")}; sddl=${descriptor.sddl})`);
   }
   if (allowSids.some((sid) => BROAD_SIDS.has(sid))) {
     throw new Error(`AgentLink Windows ACL grants broad user access: ${path}`);
