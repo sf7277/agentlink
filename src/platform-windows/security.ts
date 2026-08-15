@@ -62,12 +62,18 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     const fields = match[1]!.split(";");
     if (fields[0] === "A") allowSids.push(fields.at(-1)!);
   }
-  if (!allowSids.includes(descriptor.currentSid)) {
-    throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path} (current=${descriptor.currentSid}; allow=${allowSids.join(",")}; sddl=${descriptor.sddl})`);
+  if (!allowSids.some((sid) => sddlSidMatchesCurrentUser(sid, descriptor.currentSid))) {
+    throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
   }
   if (allowSids.some((sid) => BROAD_SIDS.has(sid))) {
     throw new Error(`AgentLink Windows ACL grants broad user access: ${path}`);
   }
+}
+
+function sddlSidMatchesCurrentUser(sid: string, currentSid: string): boolean {
+  if (sid === currentSid) return true;
+  // SDDL uses LA for the local Administrator account, whose RID is 500.
+  return sid === "LA" && currentSid.endsWith("-500");
 }
 
 async function readWindowsSecurityDescriptor(path: string): Promise<{
