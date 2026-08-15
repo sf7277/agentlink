@@ -135,7 +135,13 @@ async function runAgent(args: string[]): Promise<number> {
         : { isolatedHomeRoot: options.get("isolated-home-root")! })
     });
     await restartAfterConfigChange(paths, previous);
-    writeOutput(options, { status: "configured", ...configured });
+    writeOutput(options, {
+      status: "configured",
+      ...configured,
+      ...(process.platform === "win32"
+        ? { nextAction: "请停止并重新启动前台 Gateway：agentlink-gateway.cmd" }
+        : {})
+    });
     return 0;
   }
   if (action === "remove") {
@@ -147,7 +153,13 @@ async function runAgent(args: string[]): Promise<number> {
     const previous = await configDocumentStore(paths.config).load();
     await service.remove(agent);
     await restartAfterConfigChange(paths, previous);
-    writeOutput(options, { status: "removed", agent });
+    writeOutput(options, {
+      status: "removed",
+      agent,
+      ...(process.platform === "win32"
+        ? { nextAction: "请停止并重新启动前台 Gateway：agentlink-gateway.cmd" }
+        : {})
+    });
     return 0;
   }
   usage(process.stderr);
@@ -861,10 +873,15 @@ function formatDoctor(value: Readonly<Record<string, unknown>>): string {
 
 function formatStatus(value: Readonly<Record<string, unknown>>): string {
   const status = String(value["status"]);
+  const nextAction = typeof value["nextAction"] === "string"
+    ? `\n下一步：${value["nextAction"]}`
+    : "";
   const project = asRecord(value["project"]);
-  if (project !== undefined) return `项目已${status}：${String(project["slug"])} `;
+  if (project !== undefined) return `项目已${status}：${String(project["slug"])}${nextAction}`;
   const agent = value["agent"];
-  return agent === undefined ? `操作完成：${status}` : `Agent ${String(agent)}：${status}`;
+  return agent === undefined
+    ? `操作完成：${status}${nextAction}`
+    : `Agent ${String(agent)}：${status}${nextAction}`;
 }
 
 function sessionStatus(session: Readonly<Record<string, unknown>>): string {
