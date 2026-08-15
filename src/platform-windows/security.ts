@@ -100,8 +100,10 @@ async function readWindowsSecurityDescriptor(path: string): Promise<{
     const currentSid = current.stdout.match(/S-1-[0-9-]+/u)?.[0];
     if (currentSid === undefined) throw new Error("Could not determine the current Windows SID");
     const bytes = await readFile(savedAcl);
-    const text = bytes[0] === 0xff && bytes[1] === 0xfe
-      ? new TextDecoder("utf-16le").decode(bytes.subarray(2))
+    const hasUtf16leBom = bytes[0] === 0xff && bytes[1] === 0xfe;
+    const utf16le = hasUtf16leBom || (bytes[1] === 0 && bytes[3] === 0);
+    const text = utf16le
+      ? new TextDecoder("utf-16le").decode(bytes.subarray(hasUtf16leBom ? 2 : 0))
       : bytes.toString("utf8");
     const sddl = text.match(/D:[^\r\n]+/u)?.[0];
     if (sddl === undefined) throw new Error("Could not read the Windows security descriptor");
