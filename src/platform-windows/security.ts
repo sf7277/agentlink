@@ -10,12 +10,6 @@ const BROAD_SIDS = new Set([
   "S-1-5-32-545", // BUILTIN\\Users
   "S-1-5-32-546"  // BUILTIN\\Guests
 ]);
-const BROAD_IDENTITIES = new Set([
-  "Everyone",
-  "NT AUTHORITY\\Authenticated Users",
-  "BUILTIN\\Users",
-  "BUILTIN\\Guests"
-]);
 
 export async function assertWindowsPrivatePath(
   path: string,
@@ -62,14 +56,9 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     "$ErrorActionPreference='Stop'",
     "$p=$env:AGENTLINK_SECURITY_PATH",
     "$current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
-    "$currentName=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
     "$acl=Get-Acl -LiteralPath $p -ErrorAction Stop",
-    "$entries=@($acl.Access | ForEach-Object {",
-    "  $identity=$_.IdentityReference",
-    "  $sid=[string]$identity.Value",
-    "  [pscustomobject]@{sid=$sid;identity=[string]$identity;type=[string]$_.AccessControlType;rights=[string]$_.FileSystemRights}",
-    "})",
-    "[pscustomobject]@{currentSid=$current;currentName=$currentName;entries=$entries} | ConvertTo-Json -Compress"
+    "$sddl=$acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)",
+    "[pscustomobject]@{currentSid=$current;sddl=$sddl} | ConvertTo-Json -Compress"
   ].join("\n");
   const result = await execFileAsync(powershell, [
     "-NoProfile",
@@ -90,31 +79,18 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
   });
   const parsed = JSON.parse(result.stdout) as {
     readonly currentSid?: string;
-    readonly currentName?: string;
-    readonly entries?: {
-      readonly sid?: string;
-      readonly identity?: string;
-      readonly type?: string;
-    } | ReadonlyArray<{
-      readonly sid?: string;
-      readonly identity?: string;
-      readonly type?: string;
-    }>;
+    readonly sddl?: string;
   };
-  const entries = parsed.entries === undefined
-    ? []
-    : Array.isArray(parsed.entries)
-      ? parsed.entries
-      : [parsed.entries];
-  const currentName = parsed.currentName?.toLowerCase();
+  const allowSids: string[] = [];
+  for (const match of parsed.sddl?.matchAll(/\(([^)]+)\)/gu) ?? []) {
+    const fields = match[1]!.split(";");
+    if (fields[0] === "A") allowSids.push(fields.at(-1)!);
+  }
   if (parsed.currentSid === undefined ||
-      !entries.some((entry) => entry.type === "Allow" &&
-        (entry.sid === parsed.currentSid ||
-          (currentName !== undefined && entry.identity?.toLowerCase() === currentName)))) {
+      !allowSids.includes(parsed.currentSid)) {
     throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
   }
-  if (entries.some((entry) => entry.type === "Allow" && entry.sid !== undefined &&
-    (BROAD_SIDS.has(entry.sid) || BROAD_IDENTITIES.has(entry.sid)))) {
+  if (allowSids.some((sid) => BROAD_SIDS.has(sid))) {
     throw new Error(`AgentLink Windows ACL grants broad user access: ${path}`);
   }
 }
