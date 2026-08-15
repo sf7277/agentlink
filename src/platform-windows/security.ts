@@ -103,7 +103,7 @@ async function readWindowsSecurityDescriptor(path: string): Promise<{
     const text = bytes[0] === 0xff && bytes[1] === 0xfe
       ? new TextDecoder("utf-16le").decode(bytes.subarray(2))
       : bytes.toString("utf8");
-    const sddl = text.match(/^D:[^\r\n]+$/mu)?.[0];
+    const sddl = text.match(/D:[^\r\n]+/u)?.[0];
     if (sddl === undefined) throw new Error("Could not read the Windows security descriptor");
     return { currentSid, sddl };
   } finally {
