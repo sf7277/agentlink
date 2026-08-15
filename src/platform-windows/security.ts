@@ -10,6 +10,12 @@ const BROAD_SIDS = new Set([
   "S-1-5-32-545", // BUILTIN\\Users
   "S-1-5-32-546"  // BUILTIN\\Guests
 ]);
+const BROAD_IDENTITIES = new Set([
+  "Everyone",
+  "NT AUTHORITY\\Authenticated Users",
+  "BUILTIN\\Users",
+  "BUILTIN\\Guests"
+]);
 
 export async function assertWindowsPrivatePath(
   path: string,
@@ -58,7 +64,9 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
     "$current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
     "$acl=Get-Acl -LiteralPath $p -ErrorAction Stop",
     "$entries=@($acl.Access | ForEach-Object {",
-    "  $sid=$_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value",
+    "  $identity=$_.IdentityReference",
+    "  $sid=[string]$identity.Value",
+    "  try { $sid=$identity.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid=[string]$identity }",
     "  [pscustomobject]@{sid=$sid;type=[string]$_.AccessControlType;rights=[string]$_.FileSystemRights}",
     "})",
     "[pscustomobject]@{currentSid=$current;entries=$entries} | ConvertTo-Json -Compress"
@@ -82,17 +90,25 @@ export async function assertWindowsPrivateAcl(path: string): Promise<void> {
   });
   const parsed = JSON.parse(result.stdout) as {
     readonly currentSid?: string;
-    readonly entries?: ReadonlyArray<{
+    readonly entries?: {
+      readonly sid?: string;
+      readonly type?: string;
+    } | ReadonlyArray<{
       readonly sid?: string;
       readonly type?: string;
     }>;
   };
-  const entries = parsed.entries ?? [];
+  const entries = parsed.entries === undefined
+    ? []
+    : Array.isArray(parsed.entries)
+      ? parsed.entries
+      : [parsed.entries];
   if (parsed.currentSid === undefined ||
       !entries.some((entry) => entry.sid === parsed.currentSid && entry.type === "Allow")) {
     throw new Error(`AgentLink Windows ACL does not grant the current user access: ${path}`);
   }
-  if (entries.some((entry) => entry.type === "Allow" && entry.sid !== undefined && BROAD_SIDS.has(entry.sid))) {
+  if (entries.some((entry) => entry.type === "Allow" && entry.sid !== undefined &&
+    (BROAD_SIDS.has(entry.sid) || BROAD_IDENTITIES.has(entry.sid)))) {
     throw new Error(`AgentLink Windows ACL grants broad user access: ${path}`);
   }
 }
