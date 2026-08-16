@@ -5,12 +5,12 @@ import {
   type GatewayConfig
 } from "../composition/config-schema.js";
 import { ProjectRegistry } from "../core/application/project-registry.js";
-import { AtomicConfigStore } from "./atomic-config-store.js";
+import { AtomicConfigStore, type ConfigDocumentStore } from "./atomic-config-store.js";
 
 export class ProjectConfigService {
   public constructor(
     private readonly configPath: string,
-    private readonly store = new AtomicConfigStore(configPath)
+    private readonly store: ConfigDocumentStore = new AtomicConfigStore(configPath)
   ) {}
 
   public async list(): Promise<GatewayConfig["projects"]> {

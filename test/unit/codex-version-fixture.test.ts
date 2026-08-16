@@ -1,25 +1,47 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { verifyProtocolFixture } from "../../src/agent-codex/protocol/fixture-gate.js";
 import {
   assertSupportedVersion,
+  isVerifiedVersion,
   parseCodexVersion
 } from "../../src/agent-codex/protocol/version-gate.js";
+import { verifyGeneratedProtocolSurface } from "../../src/agent-codex/protocol/compatibility-gate.js";
 
-test("Codex version gate accepts verified patch line and rejects incompatible versions", () => {
+test("Codex version gate enforces the minimum and identifies verified versions", () => {
   const support = { minimum: "0.144.4", verified: ["0.144.4", "0.144.5"] };
   assert.doesNotThrow(() => assertSupportedVersion(parseCodexVersion("codex-cli 0.144.4"), support));
   assert.doesNotThrow(() => assertSupportedVersion(parseCodexVersion("codex-cli 0.144.5"), support));
+  assert.doesNotThrow(() => assertSupportedVersion(parseCodexVersion("codex-cli 0.145.0"), support));
+  assert.equal(isVerifiedVersion(parseCodexVersion("codex-cli 0.144.5"), support), true);
+  assert.equal(isVerifiedVersion(parseCodexVersion("codex-cli 0.145.0"), support), false);
   assert.throws(
     () => assertSupportedVersion(parseCodexVersion("codex-cli 0.143.9"), support),
     /below minimum|compatibility review/u
   );
-  assert.throws(
-    () => assertSupportedVersion(parseCodexVersion("codex-cli 0.145.0"), support),
-    /compatibility review/u
+});
+
+test("generated Codex schema contains the AgentLink stable protocol surface", async () => {
+  await assert.doesNotReject(() => verifyGeneratedProtocolSurface(
+    join(process.cwd(), "protocol-fixtures/codex/0.144.4/generated/ts")
+  ));
+});
+
+test("generated Codex schema rejects a missing required protocol method", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "agentlink-codex-incompatible-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await Promise.all([
+    writeFile(join(directory, "ClientRequest.ts"), '"method": "initialize"', "utf8"),
+    writeFile(join(directory, "ServerRequest.ts"), "", "utf8"),
+    writeFile(join(directory, "ServerNotification.ts"), "", "utf8")
+  ]);
+  await assert.rejects(
+    () => verifyGeneratedProtocolSurface(directory),
+    /missing required client methods:.*thread\/start/u
   );
 });
 
@@ -30,6 +52,7 @@ test("0.144.4 stable fixture contains every required lifecycle and approval meth
   assert.equal(fixture.codexVersion, "0.144.4");
   assert.ok(fixture.methods.includes("thread/list"));
   assert.ok(fixture.methods.includes("thread/read"));
+  assert.ok(fixture.methods.includes("thread/delete"));
   assert.ok(fixture.methods.includes("thread/inject_items"));
   assert.ok(fixture.methods.includes("turn/steer"));
   assert.ok(fixture.methods.includes("turn/interrupt"));

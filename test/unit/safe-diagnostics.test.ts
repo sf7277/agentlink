@@ -15,8 +15,10 @@ test("safe diagnostics redact credentials, normalize local paths, binary control
     "x".repeat(1_000)
   ].join(" ");
   const output = sanitizeDiagnostic(value, 256);
+  const homePattern = (process.env["HOME"] ?? "/Users/private-user")
+    .replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   assert.doesNotMatch(output, /abcdefghijklmnop|session-value|secret-value/u);
-  assert.doesNotMatch(output, new RegExp(process.env["HOME"] ?? "/Users/private-user", "u"));
+  assert.doesNotMatch(output, new RegExp(homePattern, "u"));
   assert.match(output, /\[REDACTED\]/u);
   assert.ok(Buffer.byteLength(output, "utf8") <= 256);
   assert.doesNotMatch(output, /[\u0000\u0001]/u);

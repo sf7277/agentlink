@@ -36,6 +36,30 @@ test("child transport reports unexpected process exit with bounded diagnostics",
 });
 
 test("child environment is allowlisted even when caller supplies extra variables", () => {
+  if (process.platform === "win32") {
+    assert.deepEqual(allowedEnvironment({
+      Path: "C:\\safe-path",
+      PATHEXT: ".COM;.EXE",
+      SystemRoot: "C:\\Windows",
+      TEMP: "C:\\safe-temp",
+      TMP: "C:\\safe-temp",
+      USERPROFILE: "C:\\safe-user",
+      LOCALAPPDATA: "C:\\safe-local",
+      CODEX_HOME: "C:\\safe-codex",
+      AUTH_TOKEN: "must-not-pass",
+      RUST_LOG: "trace"
+    }), {
+      Path: "C:\\safe-path",
+      PATHEXT: ".COM;.EXE",
+      SystemRoot: "C:\\Windows",
+      TEMP: "C:\\safe-temp",
+      TMP: "C:\\safe-temp",
+      USERPROFILE: "C:\\safe-user",
+      LOCALAPPDATA: "C:\\safe-local",
+      CODEX_HOME: "C:\\safe-codex"
+    });
+    return;
+  }
   assert.deepEqual(allowedEnvironment({
     HOME: "/safe-home",
     PATH: "/safe-path",

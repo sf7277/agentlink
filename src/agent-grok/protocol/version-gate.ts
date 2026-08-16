@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { captureCommandOutput } from "../../platform-windows/process-control.js";
 
 export interface GrokVersion {
   readonly major: number;
@@ -35,10 +32,10 @@ export function assertSupportedGrokVersion(
 }
 
 export async function readGrokVersion(command = "grok"): Promise<GrokVersion> {
-  const { stdout } = await execFileAsync(command, ["--version"], {
-    timeout: 5_000,
-    maxBuffer: 16 * 1024,
-    env: { PATH: process.env["PATH"] ?? "" }
+  const stdout = await captureCommandOutput(command, ["--version"], {
+    timeoutMs: 5_000,
+    maxBytes: 16 * 1024,
+    env: { PATH: process.env["PATH"] ?? process.env["Path"] ?? "" }
   });
   return parseGrokVersion(stdout);
 }

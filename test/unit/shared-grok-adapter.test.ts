@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { SharedGrokAdapter } from "../../src/agent-grok/adapter/shared-grok-adapter.js";
@@ -236,7 +237,7 @@ test("Grok close and delete are capability-gated and never report detach as nati
 });
 
 test("Grok native catalog reports a CLI-deleted Session as missing", async () => {
-  const grokHome = await mkdtemp("/tmp/agentlink-grok-catalog-");
+  const grokHome = await mkdtemp(join(tmpdir(), "agentlink-grok-catalog-"));
   const projectRoot = "/tmp/project";
   const nativeSessionId = "019f8fa2-273d-7200-a92e-0a85c7e3e9bc";
   await mkdir(join(

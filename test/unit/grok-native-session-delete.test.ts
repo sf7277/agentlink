@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { deleteGrokNativeSession } from
@@ -7,7 +8,7 @@ import { deleteGrokNativeSession } from
 import { DomainError } from "../../src/core/domain/errors.js";
 
 test("Grok native delete uses fixed CLI arguments and verifies native disappearance", async () => {
-  const root = await mkdtemp("/tmp/agentlink-grok-delete-");
+  const root = await mkdtemp(join(tmpdir(), "agentlink-grok-delete-"));
   const projectRoot = "/tmp/project";
   const nativeSessionId = "session-safe-1";
   const nativePath = join(
@@ -39,7 +40,7 @@ test("Grok native delete uses fixed CLI arguments and verifies native disappeara
 });
 
 test("Grok native delete distinguishes definite rejection from uncertain execution", async () => {
-  const root = await mkdtemp("/tmp/agentlink-grok-delete-errors-");
+  const root = await mkdtemp(join(tmpdir(), "agentlink-grok-delete-errors-"));
   const projectRoot = "/tmp/project";
   const nativeSessionId = "session-safe-2";
   const nativePath = join(

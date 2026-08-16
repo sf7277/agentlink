@@ -6,7 +6,8 @@ import { startGrokRuntime } from "../agent-grok/supervisor/runtime.js";
 import { readGrokVersion } from "../agent-grok/protocol/version-gate.js";
 import { startClaudeRuntime } from "../agent-claude/supervisor/runtime.js";
 import { AGENTLINK_VERSION } from "../version.js";
-import { AtomicConfigStore } from "./atomic-config-store.js";
+import { AtomicConfigStore, type ConfigDocumentStore } from "./atomic-config-store.js";
+import { assertWindowsPrivatePath } from "../platform-windows/security.js";
 
 export type ConfigurableAgentKind = "codex" | "grok" | "claude";
 
@@ -26,7 +27,8 @@ export class AgentConfigService {
   public constructor(
     private readonly configPath: string,
     private readonly probeParent: string,
-    private readonly verifier: AgentCommandVerifier = new NativeAgentCommandVerifier()
+    private readonly verifier: AgentCommandVerifier = new NativeAgentCommandVerifier(),
+    private readonly store: ConfigDocumentStore = new AtomicConfigStore(configPath)
   ) {}
 
   public async list(): Promise<readonly {
@@ -34,7 +36,7 @@ export class AgentConfigService {
     command: string;
     capabilities: ReturnType<typeof agentCapabilities>;
   }[]> {
-    const config = await new AtomicConfigStore(this.configPath).load();
+    const config = await this.store.load();
     return (["codex", "grok", "claude"] as const).flatMap((agent): {
       agent: ConfigurableAgentKind;
       command: string;
@@ -67,7 +69,7 @@ export class AgentConfigService {
     } finally {
       await rm(probeRoot, { recursive: true, force: true });
     }
-    const store = new AtomicConfigStore(this.configPath);
+    const store = this.store;
     const config = await store.load();
     if (input.agent === "claude") {
       await store.save({
@@ -104,7 +106,7 @@ export class AgentConfigService {
   }
 
   public async remove(agent: ConfigurableAgentKind): Promise<void> {
-    const store = new AtomicConfigStore(this.configPath);
+    const store = this.store;
     const config = await store.load();
     if (config[agent] === undefined) throw new Error(`Agent is not configured: ${agent}`);
     const referencing = config.projects.filter((project) => project.allowedAgents.includes(agent));
@@ -191,6 +193,17 @@ async function trustedExecutable(path: string): Promise<string> {
   if (!isAbsolute(path)) throw new Error("Agent command must be an absolute path");
   const canonical = await realpath(path);
   const metadata = await lstat(canonical);
+  if (process.platform === "win32") {
+    await assertWindowsPrivatePath(canonical, "file");
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      throw new Error("Agent command must be a trusted Windows executable file");
+    }
+    const lower = canonical.toLowerCase();
+    if (!lower.endsWith(".exe") && !lower.endsWith(".cmd") && !lower.endsWith(".bat")) {
+      throw new Error("Windows Agent command must end in .exe, .cmd or .bat");
+    }
+    return canonical;
+  }
   const uid = process.getuid?.();
   if (
     !metadata.isFile() ||
@@ -207,6 +220,7 @@ async function trustedPrivateDirectory(path: string): Promise<string> {
   if (!isAbsolute(path)) throw new Error("Grok isolated home root must be absolute");
   const canonical = await realpath(path);
   const metadata = await lstat(canonical);
+  if (process.platform === "win32") await assertWindowsPrivatePath(canonical, "directory");
   const uid = process.getuid?.();
   if (
     !metadata.isDirectory() ||

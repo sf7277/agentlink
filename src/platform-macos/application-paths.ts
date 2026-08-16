@@ -1,19 +1,9 @@
 import { realpathSync } from "node:fs";
 import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import type { ApplicationPaths } from "../platform/application-paths.js";
 
-export interface MacosApplicationPaths {
-  readonly applicationSupport: string;
-  readonly caches: string;
-  readonly logs: string;
-  readonly runtime: string;
-  readonly releases: string;
-  readonly backups: string;
-  readonly config: string;
-  readonly database: string;
-  readonly socket: string;
-  readonly launchAgent: string;
-}
+export interface MacosApplicationPaths extends ApplicationPaths {}
 
 export function macosApplicationPaths(home = process.env["HOME"]): MacosApplicationPaths {
   if (home === undefined || !home.startsWith("/")) {

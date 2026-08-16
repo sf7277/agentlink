@@ -1,7 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { captureCommandOutput } from "../../platform-windows/process-control.js";
 
 export interface CodexVersion {
   readonly major: number;
@@ -31,16 +28,17 @@ export function assertSupportedVersion(version: CodexVersion, support: VersionSu
   if (compareVersion(version, minimum) < 0) {
     throw new Error(`Codex ${version.raw} is below minimum ${minimum.raw}`);
   }
-  if (version.major !== minimum.major || version.minor !== minimum.minor) {
-    throw new Error(`Codex ${version.raw} requires a new compatibility review`);
-  }
+}
+
+export function isVerifiedVersion(version: CodexVersion, support: VersionSupport): boolean {
+  return support.verified.includes(version.raw);
 }
 
 export async function readCodexVersion(command = "codex"): Promise<CodexVersion> {
-  const { stdout } = await execFileAsync(command, ["--version"], {
-    timeout: 5_000,
-    maxBuffer: 16 * 1024,
-    env: { PATH: process.env["PATH"] ?? "" }
+  const stdout = await captureCommandOutput(command, ["--version"], {
+    timeoutMs: 5_000,
+    maxBytes: 16 * 1024,
+    env: { PATH: process.env["PATH"] ?? process.env["Path"] ?? "" }
   });
   return parseCodexVersion(stdout);
 }

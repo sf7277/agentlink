@@ -1,12 +1,12 @@
 # AgentLink 运维手册
 
-适用于通过 npm 安装的 macOS 个人实验/学习环境。
+适用于通过 npm 安装的 macOS 或 Windows 个人实验/学习环境。
 
 > AgentLink 不是腾讯、微信、OpenAI 或 xAI 发布、认证或支持的产品。使用者自行承担平台帐号限制、服务中断、兼容性及本机 Agent 执行风险。
 
 ## 1. 前置条件
 
-- macOS（Apple Silicon 或 Intel）。
+- macOS（Apple Silicon 或 Intel），或 Windows 11 x64。
 - Node.js 22 或更高版本。
 - 已安装并登录至少一个目标 Agent CLI：Codex CLI 或 Grok CLI。
 - 一个由当前用户拥有的本地项目目录。
@@ -20,6 +20,15 @@ agentlink doctor
 ```
 
 `better-sqlite3` 会按当前 Node ABI 安装或编译原生模块。安装失败时，先确认 Node 版本、Xcode Command Line Tools、Python 和本机编译环境。
+
+Windows 使用：
+
+```powershell
+npm.cmd install -g @sf7277/agentlink --no-audit --no-fund
+agentlink.cmd doctor
+```
+
+Windows 版本使用当前用户 Credential Manager 保存凭证，使用当前用户 Named Pipe 作为本地控制通道；不兼容 macOS Keychain、OpenClaw 凭证文件或 Windows ARM64。
 
 ## 2. 首次配置
 
@@ -92,6 +101,15 @@ agentlink-gateway > ~/Library/Logs/agentlink-gateway.log 2>&1 &
 后一种方式不是受管 macOS 服务：退出登录或重启后不会自动恢复，且该日志不由 AgentLink 自动轮转。若需停止该后台进程，请使用启动它的 shell job/PID；不要在不确定目标的情况下按名称批量结束进程。
 
 当前 npm 包不包含完整的 macOS release 目录，因此不能直接使用 `agentlink service install --release ...`。该命令留给未来带内置 Node runtime 的 DMG/PKG 发行包。
+
+Windows 前台运行：
+
+```powershell
+agentlink-gateway.cmd
+```
+
+保持 Gateway 窗口开启，退出请按 `Ctrl+C`。Windows 任务19不提供后台服务、自启动或 Task Scheduler。执行
+`agentlink.cmd agent configure ...` 或 `agentlink.cmd agent remove ...` 修改 Agent 配置后，必须按命令提示重启前台 Gateway。
 
 ## 4. 微信端基本使用
 

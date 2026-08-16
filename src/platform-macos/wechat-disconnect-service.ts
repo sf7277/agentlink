@@ -4,13 +4,13 @@ import {
   gatewayConfigSchema,
   type GatewayConfig
 } from "../composition/config-schema.js";
-import { AtomicConfigStore } from "./atomic-config-store.js";
+import { AtomicConfigStore, type ConfigDocumentStore } from "./atomic-config-store.js";
 
 export class WechatDisconnectService {
   public constructor(
     private readonly configPath: string,
     private readonly credentials: CredentialStore,
-    private readonly store = new AtomicConfigStore(configPath)
+    private readonly store: ConfigDocumentStore = new AtomicConfigStore(configPath)
   ) {}
 
   public async disconnect(): Promise<{
