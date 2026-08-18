@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -1046,11 +1047,17 @@ const commandUsage: Readonly<Record<string, string>> = {
 const entrypoint = process.argv[1];
 const entrypointPath = entrypoint === undefined ? undefined : resolve(entrypoint);
 const modulePath = fileURLToPath(import.meta.url);
+const canonicalEntrypointPath = entrypointPath === undefined
+  ? undefined
+  : canonicalPath(entrypointPath);
+const canonicalModulePath = canonicalPath(modulePath);
 const isEntrypoint = entrypointPath !== undefined && (
-  process.platform === "win32"
-    ? entrypointPath.toLowerCase() === modulePath.toLowerCase()
-      || basename(entrypointPath).toLowerCase() === "ctl.js"
-    : entrypointPath === modulePath
+  canonicalEntrypointPath !== undefined && (
+    process.platform === "win32"
+      ? canonicalEntrypointPath.toLowerCase() === canonicalModulePath.toLowerCase()
+        || basename(entrypointPath).toLowerCase() === "ctl.js"
+      : canonicalEntrypointPath === canonicalModulePath
+  )
 );
 if (isEntrypoint) {
   try {
@@ -1060,5 +1067,13 @@ if (isEntrypoint) {
       `${error instanceof Error ? error.message : "agentlink failed"}\n`
     );
     process.exitCode = 1;
+  }
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
   }
 }

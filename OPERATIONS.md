@@ -15,16 +15,23 @@
 安装 AgentLink：
 
 ```bash
-npm install -g @sf7277/agentlink
+npm install -g @myzzz/agentlink
 agentlink doctor
 ```
 
 `better-sqlite3` 会按当前 Node ABI 安装或编译原生模块。安装失败时，先确认 Node 版本、Xcode Command Line Tools、Python 和本机编译环境。
 
-Windows 使用：
+Windows 默认直接使用：
 
 ```powershell
-npm.cmd install -g @sf7277/agentlink --no-audit --no-fund
+npm install -g @myzzz/agentlink --no-audit --no-fund
+agentlink doctor
+```
+
+如果 PowerShell 报告禁止运行脚本或遇到执行策略限制，再将对应命令改为带 `.cmd` 后缀的形式：
+
+```powershell
+npm.cmd install -g @myzzz/agentlink --no-audit --no-fund
 agentlink.cmd doctor
 ```
 
@@ -92,24 +99,35 @@ agentlink disconnect wechat
 agentlink-gateway
 ```
 
-如需在当前登录期间作为普通后台进程运行：
+如需在当前登录期间作为普通后台进程运行（npm 安装）：
 
 ```bash
-agentlink-gateway > ~/Library/Logs/agentlink-gateway.log 2>&1 &
+mkdir -p "$HOME/Library/Logs/AgentLink"
+
+nohup agentlink-gateway \
+  > "$HOME/Library/Logs/AgentLink/npm-gateway.stdout.log" \
+  2> "$HOME/Library/Logs/AgentLink/npm-gateway.stderr.log" &
 ```
 
-后一种方式不是受管 macOS 服务：退出登录或重启后不会自动恢复，且该日志不由 AgentLink 自动轮转。若需停止该后台进程，请使用启动它的 shell job/PID；不要在不确定目标的情况下按名称批量结束进程。
+这会让 Gateway 脱离当前终端运行，但不是受管 macOS 服务：退出登录或重启后不会自动恢复，且该日志不由 AgentLink 自动轮转。若需停止该后台进程，请使用启动它的 shell job/PID；不要在不确定目标的情况下按名称批量结束进程。
 
 当前 npm 包不包含完整的 macOS release 目录，因此不能直接使用 `agentlink service install --release ...`。该命令留给未来带内置 Node runtime 的 DMG/PKG 发行包。
 
 Windows 前台运行：
 
 ```powershell
+agentlink-gateway
+```
+
+如果 PowerShell 报告禁止运行脚本或遇到执行策略限制，再使用：
+
+```powershell
 agentlink-gateway.cmd
 ```
 
 保持 Gateway 窗口开启，退出请按 `Ctrl+C`。Windows 任务19不提供后台服务、自启动或 Task Scheduler。执行
-`agentlink.cmd agent configure ...` 或 `agentlink.cmd agent remove ...` 修改 Agent 配置后，必须按命令提示重启前台 Gateway。
+`agentlink agent configure ...` 或 `agentlink agent remove ...` 修改 Agent 配置后，必须按命令提示重启前台 Gateway。
+如果 PowerShell 遇到脚本执行策略限制，再将这些命令改为对应的 `.cmd` 形式。
 
 ## 4. 微信端基本使用
 
@@ -172,7 +190,7 @@ agentlink service restore --input /safe/path/agentlink.sqlite --confirm-local
 ## 7. 升级
 
 ```bash
-npm install -g @sf7277/agentlink@latest
+npm install -g @myzzz/agentlink@latest
 agentlink doctor
 ```
 

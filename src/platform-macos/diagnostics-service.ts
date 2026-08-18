@@ -103,20 +103,27 @@ export async function diagnoseAgentLink(
   const configuredAgentCount = Object.keys(agents).length;
   const agentsHealthy = configuredAgentCount > 0 &&
     Object.values(agents).every((value) => typeof value === "string");
-  const runtime = await serviceRuntime(paths);
+  let controlReachable = false;
   const logs = await managedLogStatus(paths);
   let channel = config?.wechat === undefined ? "DISABLED" : "UNKNOWN";
-  if (config?.wechat !== undefined && readChannelStatus !== undefined) {
+  if (readChannelStatus !== undefined) {
     try {
       channel = await readChannelStatus();
+      controlReachable = true;
+      if (config?.wechat === undefined) channel = "DISABLED";
     } catch {
       channel = "UNKNOWN";
     }
   }
+  const runtime = await serviceRuntime(paths, controlReachable);
+  const foreground = runtime["mode"] === "foreground";
+  const serviceStatus = !status.loaded && foreground
+    ? { ...status, loaded: true, detail: "foreground_loaded" }
+    : status;
   const channelHealthy = config?.wechat === undefined || channel === "HEALTHY";
   return {
-    ok: status.installed &&
-      status.loaded &&
+    ok: serviceStatus.loaded &&
+      (serviceStatus.installed || foreground) &&
       config !== undefined &&
       database === "ok" &&
       socket?.isSocket() === true &&
@@ -128,7 +135,7 @@ export async function diagnoseAgentLink(
     runtime,
     logs,
     channel: { channel: "wechat", status: channel },
-    service: status,
+    service: serviceStatus,
     config: config === undefined ? { status: "failed", error: configError } : {
       status: "ok",
       projects: config.projects.length,
@@ -149,7 +156,19 @@ export async function diagnoseAgentLink(
   };
 }
 
-async function serviceRuntime(paths: MacosApplicationPaths): Promise<Readonly<Record<string, unknown>>> {
+async function serviceRuntime(
+  paths: MacosApplicationPaths,
+  controlReachable: boolean
+): Promise<Readonly<Record<string, unknown>>> {
+  if (await optionalMetadata(paths.launchAgent) === undefined && controlReachable) {
+    return {
+      status: "ok",
+      mode: "foreground",
+      platform: "darwin",
+      version: process.versions.node,
+      distribution: "npm"
+    };
+  }
   try {
     const plistMetadata = await lstat(paths.launchAgent);
     const uid = process.getuid?.();

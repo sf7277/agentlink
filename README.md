@@ -29,20 +29,27 @@ Codex CLI最低支持版本为`0.144.4`。AgentLink对已验证版本直接启�
 `0.144.x`。检查不会创建或修改Codex Session，且不会自动启用实验API。
 
 ```bash
-npm install -g @sf7277/agentlink
+npm install -g @myzzz/agentlink
 agentlink doctor
 ```
 
-当前 npm 版本为 [0.1.32](https://www.npmjs.com/package/@sf7277/agentlink)。
+当前 npm 版本为 [0.1.34](https://www.npmjs.com/package/@myzzz/agentlink)。
 
 安装时，`better-sqlite3` 会匹配当前 Node ABI；若没有可用预编译模块，npm 会在本机编译。因此可能需要 Xcode Command Line Tools、Python 和可用编译环境。安装过程还会为当前 macOS 架构编译 Keychain 与二维码辅助程序。
 
 Windows npm 安装只支持 x64；安装过程跳过 macOS 原生辅助程序，凭证使用当前用户 Windows Credential Manager，控制通道使用当前用户 Named Pipe。若 `better-sqlite3` 预编译包下载失败，npm 会尝试本机编译，可能需要 Visual Studio Desktop development with C++、Python 和可用的网络连接。
 
-Windows 使用 `npm.cmd` 和 `.cmd` 入口以避免 PowerShell 脚本执行策略影响：
+Windows 默认直接使用以下命令：
 
 ```powershell
-npm.cmd install -g @sf7277/agentlink --no-audit --no-fund
+npm install -g @myzzz/agentlink --no-audit --no-fund
+agentlink doctor
+```
+
+如果 PowerShell 报告禁止运行脚本或遇到执行策略限制，再将对应命令改为带 `.cmd` 后缀的形式：
+
+```powershell
+npm.cmd install -g @myzzz/agentlink --no-audit --no-fund
 agentlink.cmd doctor
 ```
 
@@ -81,15 +88,25 @@ Grok TUI 与 AgentLink 使用独立登录态；配置 Grok 后需对 AgentLink �
 agentlink-gateway
 ```
 
-如需在当前登录期间作为普通后台进程运行，可使用：
+如需在当前登录期间作为普通后台进程运行（npm 安装），可使用：
 
 ```bash
-agentlink-gateway > ~/Library/Logs/agentlink-gateway.log 2>&1 &
+mkdir -p "$HOME/Library/Logs/AgentLink"
+
+nohup agentlink-gateway \
+  > "$HOME/Library/Logs/AgentLink/npm-gateway.stdout.log" \
+  2> "$HOME/Library/Logs/AgentLink/npm-gateway.stderr.log" &
 ```
 
-这不是 macOS 服务安装：退出登录或重启后不会自动恢复，日志也不受 AgentLink 服务的轮转管理。未来的 DMG/PKG 发行包会提供受控的 LaunchAgent 后台安装。
+这会让 Gateway 脱离当前终端运行，但不是 macOS 服务安装：退出登录或重启后不会自动恢复，日志也不受 AgentLink 服务的轮转管理。未来的 DMG/PKG 发行包会提供受控的 LaunchAgent 后台安装。
 
 Windows 前台运行：
+
+```powershell
+agentlink-gateway
+```
+
+如果 PowerShell 报告禁止运行脚本或遇到执行策略限制，再使用：
 
 ```powershell
 agentlink-gateway.cmd

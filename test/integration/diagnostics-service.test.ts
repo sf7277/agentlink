@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chmod, copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -142,4 +143,59 @@ test("doctor reports bundled service runtime, log boundaries and authorized chan
     releaseVersion: "0.2.0"
   });
   assert.equal((result["logs"] as { status: string }).status, "ok");
+});
+
+test("doctor recognizes an npm foreground Gateway without a LaunchAgent", async () => {
+  // Keep the Unix socket path below macOS's pathname limit.
+  const home = await mkdtemp("/tmp/agentlink-npm-");
+  const paths = macosApplicationPaths(home);
+  await ensureMacosApplicationPaths(paths);
+  const codex = join(home, "codex");
+  await writeFile(codex, "", { mode: 0o700 });
+  await new AtomicConfigStore(paths.config).save({
+    codex: {
+      command: codex,
+      maxActiveTurns: 4,
+      requestPermissionsTool: true,
+      experimentalApi: true
+    },
+    projects: []
+  });
+  const database = new Database(paths.database);
+  database.exec("CREATE TABLE health(id INTEGER PRIMARY KEY)");
+  database.close();
+  await chmod(paths.database, 0o600);
+  await writeFile(`${paths.logs}/gateway.stdout.log`, "ready\n", { mode: 0o600 });
+  await writeFile(`${paths.logs}/gateway.stderr.log`, "", { mode: 0o600 });
+  const server = createServer(() => undefined);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(paths.socket, () => resolve());
+  });
+  await chmod(paths.socket, 0o600);
+  try {
+    const result = await diagnoseAgentLink(
+      paths,
+      { status: async () => ({ installed: false, loaded: false, detail: "not_installed" }) },
+      async () => "codex-cli 0.144.4",
+      async () => "DISABLED"
+    );
+    assert.deepEqual(result["runtime"], {
+      status: "ok",
+      mode: "foreground",
+      platform: "darwin",
+      version: process.versions.node,
+      distribution: "npm"
+    });
+    assert.deepEqual(result["service"], {
+      installed: false,
+      loaded: true,
+      detail: "foreground_loaded"
+    });
+    assert.equal(result["ok"], true);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => error === undefined ? resolve() : reject(error));
+    });
+  }
 });

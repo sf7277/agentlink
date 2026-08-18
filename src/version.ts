@@ -1,1 +1,1 @@
-export const AGENTLINK_VERSION = "0.1.32";
+export const AGENTLINK_VERSION = "0.1.34";
