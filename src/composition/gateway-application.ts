@@ -9,7 +9,10 @@ import type {
 } from "../core/contracts/ports.js";
 import type { AgentApprovalRequest, AgentSession, Turn } from "../core/domain/model.js";
 import { createHash } from "node:crypto";
-import { DomainError } from "../core/domain/errors.js";
+import {
+  AgentOperationUncertainError,
+  DomainError
+} from "../core/domain/errors.js";
 import { isTerminalTurn } from "../core/domain/transitions.js";
 import { ApprovalBroker } from "../core/application/approval-broker.js";
 import { IdentityService } from "../core/application/identity-service.js";
@@ -410,7 +413,11 @@ export class GatewayApplication {
       if ("sessionId" in event) {
         this.options.publishLocal(event.sessionId, {
           event: "request_failed",
-          code: error instanceof DomainError ? error.code : "internal_error"
+          code: error instanceof DomainError
+            ? error.code
+            : error instanceof AgentOperationUncertainError
+              ? error.code
+              : "internal_error"
         });
       }
       throw error;

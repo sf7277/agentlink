@@ -72,13 +72,14 @@ export class UnixControlServer implements LocalControlPort {
     if (Buffer.byteLength(line, "utf8") > this.#maxPublishedBytes) {
       throw new Error("Local control publication exceeds size limit");
     }
-    for (const client of this.#clients) client.write(line);
+    for (const client of this.#clients) this.writeSafely(client, line);
   }
 
   private accept(socket: Socket): void {
     this.#clients.add(socket);
     socket.on("close", () => this.#clients.delete(socket));
-    socket.on("error", () => undefined);
+    socket.on("end", () => socket.destroy());
+    socket.on("error", () => socket.destroy());
     let pendingLineBytes = 0;
     socket.on("data", (chunk: Buffer) => {
       for (const byte of chunk) {
@@ -106,7 +107,7 @@ export class UnixControlServer implements LocalControlPort {
         throw new Error("Local control endpoint is not authorized");
       }
       const result = await this.#handler?.(event);
-      socket.write(`${JSON.stringify({
+      this.writeSafely(socket, `${JSON.stringify({
         ok: true,
         ...(result === undefined ? {} : { result })
       })}\n`);
@@ -114,7 +115,20 @@ export class UnixControlServer implements LocalControlPort {
       const message = error instanceof ZodError || error instanceof SyntaxError
         ? "Invalid local control request"
         : sanitizeDiagnostic(error instanceof Error ? error.message : "Invalid request");
-      socket.write(`${JSON.stringify({ ok: false, error: message })}\n`);
+      this.writeSafely(socket, `${JSON.stringify({ ok: false, error: message })}\n`);
+    }
+  }
+
+  private writeSafely(socket: Socket, line: string): void {
+    if (socket.destroyed || socket.writableEnded || !socket.writable) return;
+    try {
+      socket.write(line, "utf8", (error?: Error | null) => {
+        if (error !== undefined && error !== null && (error as NodeJS.ErrnoException).code !== "EPIPE") {
+          socket.destroy();
+        }
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EPIPE") socket.destroy();
     }
   }
 

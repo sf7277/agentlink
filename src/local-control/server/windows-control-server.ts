@@ -122,7 +122,9 @@ export class WindowsControlServer implements LocalControlPort {
     if (Buffer.byteLength(line, "utf8") > this.#maxPublishedBytes) {
       throw new Error("Local control publication exceeds size limit");
     }
-    for (const connection of this.#connections) void connection.write(line);
+    for (const connection of this.#connections) {
+      void connection.write(line).catch(() => connection.close());
+    }
   }
 
   private beginAccept(firstInstance: boolean): void {

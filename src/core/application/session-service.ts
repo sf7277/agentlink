@@ -12,6 +12,7 @@ import {
 } from "../domain/errors.js";
 import type { AgentSession } from "../domain/model.js";
 import { isTerminalTurn, transitionSession, transitionTurn } from "../domain/transitions.js";
+import { sanitizeDiagnostic } from "./safe-diagnostics.js";
 import { sanitizeDisplayName } from "./mobile-text.js";
 import { SessionLinearizer } from "./session-linearizer.js";
 
@@ -307,9 +308,12 @@ export class SessionService {
           });
         }
       }));
-      throw new AgentOperationUncertainError("Native Session deletion is uncertain", {
-        cause: error
-      });
+      throw new AgentOperationUncertainError(
+        `Native Session deletion is uncertain: ${diagnosticDetail(error)}`,
+        {
+          cause: error
+        }
+      );
     }
   }
 
@@ -369,7 +373,10 @@ export class SessionService {
           });
         }
       }));
-      throw new AgentOperationUncertainError("Native Session detach is uncertain", { cause: error });
+      throw new AgentOperationUncertainError(
+        `Native Session detach is uncertain: ${diagnosticDetail(error)}`,
+        { cause: error }
+      );
     }
   }
 
@@ -384,4 +391,8 @@ export class SessionService {
       }
     }));
   }
+}
+
+function diagnosticDetail(error: unknown): string {
+  return sanitizeDiagnostic(error instanceof Error ? error.message : "unknown agent error");
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, stat } from "node:fs/promises";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -67,6 +68,49 @@ test("Unix Socket bounds input, output and request rate", async (context) => {
   assert.equal(limited.ok, false);
   assert.match(limited.error, /rate exceeded/u);
   assert.throws(() => server.publish("session-1", { text: "x".repeat(300) }), /size limit/u);
+});
+
+test("Unix Socket survives a client disconnect before the response is written", async (context) => {
+  const root = await mkdtemp(join(tmpdir(), "agentlink-socket-disconnect-"));
+  context.after(async () => {
+    const { rm } = await import("node:fs/promises");
+    await rm(root, { recursive: true, force: true });
+  });
+  const socketPath = join(root, "gateway.sock");
+  let releaseHandler!: () => void;
+  let markHandlerStarted!: () => void;
+  const handlerReleased = new Promise<void>((resolve) => { releaseHandler = resolve; });
+  const handlerStarted = new Promise<void>((resolve) => { markHandlerStarted = resolve; });
+  const server = new UnixControlServer(socketPath);
+  await server.start(async () => {
+    markHandlerStarted();
+    await handlerReleased;
+  });
+  context.after(() => server.stop());
+
+  const client = createConnection(socketPath);
+  await new Promise<void>((resolve, reject) => {
+    client.once("connect", () => {
+      client.write(JSON.stringify({
+        endpointId: "local-cli",
+        sessionId: "session-1",
+        text: "disconnect",
+        kind: "input"
+      }) + "\n", "utf8", () => resolve());
+    });
+    client.once("error", reject);
+  });
+  await handlerStarted;
+  client.end();
+  await new Promise<void>((resolve) => client.once("close", () => resolve()));
+  releaseHandler();
+
+  assert.deepEqual(await sendControlEvent(socketPath, {
+    endpointId: "local-cli",
+    sessionId: "session-1",
+    text: "still-alive",
+    kind: "input"
+  }), { ok: true });
 });
 
 test("Unix Socket returns scoped Session discovery results without requiring a Session ID", async (context) => {

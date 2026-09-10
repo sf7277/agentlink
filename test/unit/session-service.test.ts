@@ -272,6 +272,31 @@ test("owned idle Session deletion does not require archive and removes native st
   assert.equal(store.sessions.has("session-1"), false);
 });
 
+test("uncertain native deletion preserves a safe diagnostic and marks Session UNKNOWN", async () => {
+  const store = new MemoryStateStore();
+  const agent = new FakeAgent({ steering: true, cancellation: true, approvals: true });
+  agent.deleteNativeSession = async () => {
+    throw new Error("thread/delete failed (-32603): no such table: agent_jobs");
+  };
+  store.sessions.set("session-1", {
+    ...openSession(),
+    nativeSessionId: "thread-1"
+  });
+  const service = new SessionService(
+    store, agent, new FakeClock(), new FakeIdGenerator(), new SessionLinearizer()
+  );
+
+  await assert.rejects(
+    service.deleteOwned("session-1"),
+    (error: unknown) =>
+      error instanceof AgentOperationUncertainError &&
+      error.code === "agent_operation_uncertain" &&
+      error.message.includes("no such table: agent_jobs")
+  );
+  assert.equal(store.sessions.get("session-1")?.state, "UNKNOWN");
+  assert.equal(store.sessions.get("session-1")?.queuePaused, true);
+});
+
 test("external Session detach clears only its native mapping", async () => {
   const store = new MemoryStateStore();
   const agent = new FakeAgent({ steering: true, cancellation: true, approvals: true });

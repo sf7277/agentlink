@@ -23,6 +23,8 @@ export class QueueFullError extends DomainError {
 }
 
 export class AgentOperationUncertainError extends Error {
+  public readonly code = "agent_operation_uncertain";
+
   public constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "AgentOperationUncertainError";
